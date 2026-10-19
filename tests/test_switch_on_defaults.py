@@ -26,7 +26,7 @@ from conftest import load
 import ha_stub
 
 COMPONENT = pathlib.Path(__file__).resolve().parent.parent / "custom_components" / "ctc_ecozenith"
-PLATFORMS = ("sensor", "binary_sensor", "number", "select", "button", "event")
+PLATFORMS = ("sensor", "binary_sensor", "number", "select", "button", "event", "switch")
 
 
 class Disabler(enum.StrEnum):

@@ -8,7 +8,8 @@
  *   custom:ctc-ecozenith-chips      what the pump is doing right now, a line of chips
  *   custom:ctc-ecozenith-readings   the key figures, a small name over a big number
  *   custom:ctc-ecozenith-controls   one row per control: name on the left, the thing
- *                                   it is on the right, a list, a slider or a field
+ *                                   it is on the right, a list, a slider, a field,
+ *                                   a button or, for a switch, a tick box
  *   custom:ctc-ecozenith-rows       a list of values, name on the left and value on
  *                                   the right, in as many columns as there is room
  *                                   for, with headings and a filter over the lot
@@ -592,6 +593,9 @@
       if (domain === "button") {
         return this._hass.callService("button", "press", { entity_id: entityId });
       }
+      if (domain === "switch") {
+        return this._hass.callService("switch", value ? "turn_on" : "turn_off", { entity_id: entityId });
+      }
       return undefined;
     }
   }
@@ -796,6 +800,10 @@
       background: var(--card-background-color, #fff); color: var(--primary-text-color);
     }
     input[type="range"] { width: 130px; accent-color: var(--primary-color, #03a9f4); }
+    input[type="checkbox"] {
+      width: 20px; height: 20px; margin: 0; cursor: pointer;
+      accent-color: var(--primary-color, #03a9f4);
+    }
     .reading { color: var(--primary-text-color); font-weight: 500; min-width: 56px; text-align: right; }
     .widget button {
       font: inherit; padding: 6px 14px; border-radius: 8px; cursor: pointer;
@@ -992,6 +1000,31 @@
         return () => {
           const stateObj = this._state(entityId);
           button.disabled = !stateObj || stateObj.state === "unavailable";
+        };
+      }
+
+      if (domain === "switch") {
+        // The integration's own switch, the debug report (switch.py): a tick
+        // box, named on a screen reader by the row's name as the list is. A
+        // click is sent at once, there being nothing to step through. While
+        // the write is on its way the box keeps the tick the user gave it,
+        // and the state that says the same ends the busy mark; a refusal,
+        // which Home Assistant shows as a toast, puts back what the state says.
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.setAttribute("aria-label", name);
+        const isOn = (stateObj) => Boolean(stateObj) && stateObj.state === "on";
+        box.addEventListener("change", () => {
+          send(box.checked).then((taken) => {
+            if (!taken) box.checked = isOn(this._state(entityId));
+          });
+        });
+        container.appendChild(box);
+        return () => {
+          const stateObj = this._state(entityId);
+          if (stateObj && container.dataset.pending !== "1") box.checked = isOn(stateObj);
+          if (stateObj && box.checked === isOn(stateObj)) container.dataset.pending = "0";
+          box.disabled = !stateObj || stateObj.state === "unavailable";
         };
       }
 
@@ -1537,7 +1570,7 @@
   //: holds the two sides equal.
   const SECTIONS = [
     "status", "overrides", "quick_controls", "key_readings",
-    "heating_controls", "hot_water_controls", "power_controls",
+    "heating_controls", "hot_water_controls", "power_controls", "troubleshooting",
     "temperatures", "hot_water", "energy", "compressor", "cycles", "settings", "unit", "other",
     "values",
   ];
@@ -1550,6 +1583,7 @@
       heating_controls: "Styrning: Värme",
       hot_water_controls: "Styrning: Varmvatten",
       power_controls: "Styrning: Drift och el",
+      troubleshooting: "Styrning: Felsökning",
       temperatures: "Prestanda: Temperaturer",
       hot_water: "Prestanda: Varmvatten",
       energy: "Prestanda: Energi och värmefaktor",
@@ -1568,6 +1602,7 @@
       heating_controls: "Controls: Heating",
       hot_water_controls: "Controls: Hot water",
       power_controls: "Controls: Operation and power",
+      troubleshooting: "Controls: Troubleshooting",
       temperatures: "Performance: Temperatures",
       hot_water: "Performance: Hot water",
       energy: "Performance: Energy and COP",

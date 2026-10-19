@@ -94,7 +94,14 @@ def test_the_background_adopts_the_identity_instead_of_writing_it_for_a_reload()
         assert adopt.index(told) < adopt.index("async_update_entry("), f"{told} före skrivningen"
     # One rule for the listener and for the task that writes from the inside.
     rule = source.split("def _takes_a_reload")[1].split("\nasync def ")[0]
-    assert "only_identity_differs(runtime.applied_options, options)" in rule
+    # The debug report is taken out of both sides first: it is applied in
+    # place by its reporter, and never takes a reload (debug_report.py).
+    assert (
+        "only_identity_differs(\n"
+        "        without_the_debug_report(runtime.applied_options), "
+        "without_the_debug_report(options)\n"
+        "    )"
+    ) in rule
     assert "dict(entry.data) != runtime.applied_data" in rule, "ett värdbyte laddar fortfarande om"
     reload = source.split("async def _async_reload")[1].split("\nasync def ")[0]
     assert "_takes_a_reload(entry, runtime, entry.options)" in reload

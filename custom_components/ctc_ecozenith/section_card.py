@@ -23,10 +23,12 @@ only the integration's own cards, which are all the section card can draw.
 
 A section is named by an id that stays put when its heading is translated or
 reworded (SECTIONS). Most are the ids the page itself uses; the hot water is on
-two tabs, as readings and as controls, so the controls' sections all carry
-"_controls", and the overview's own carry what they are. What Home Assistant
-holds in the pump (roadmap R49) is a section only while it holds anything, and
-the card keeps the page's rule: it is drawn while the count is above zero.
+two tabs, as readings and as controls, so the controls' sections for the house
+all carry "_controls", and the overview's own carry what they are, as does the
+section last on the controls tab, troubleshooting, with the debug report's
+switch. What Home Assistant holds in the pump (roadmap R49) is a section only
+while it holds anything, and the card keeps the page's rule: it is drawn while
+the count is above zero.
 
 Free of Home Assistant, like dashboard_views.py, so the sections can be checked
 against the page without an installation (tests/test_section_card.py).
@@ -59,6 +61,7 @@ SECTIONS: Final[dict[str, tuple[str, str | None]]] = {
     "heating_controls": ("controls", "heating"),
     "hot_water_controls": ("controls", "hot_water"),
     "power_controls": ("controls", "power"),
+    "troubleshooting": ("controls", "troubleshooting"),
     "temperatures": ("performance", "temperatures"),
     "hot_water": ("performance", "hot_water"),
     "energy": ("performance", "energy"),

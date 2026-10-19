@@ -176,6 +176,16 @@ def install() -> bool:
 
     select.SelectEntity = SelectEntity
 
+    # The debug report's switch (switch.py) reads its entry and writes it; the
+    # entity's own machinery is what a test gives the instance, in both worlds.
+    switch = _module("homeassistant.components.switch")
+
+    class SwitchEntity:
+        async def async_added_to_hass(self) -> None:
+            return None
+
+    switch.SwitchEntity = SwitchEntity
+
     sensor = _module("homeassistant.components.sensor")
 
     class SensorDeviceClass(enum.Enum):

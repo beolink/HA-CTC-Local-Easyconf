@@ -47,6 +47,7 @@ def test_the_platforms_load_in_either_world():
     assert load("binary_sensor").CtcDerivedBinary
     assert load("number").CtcControlNumber
     assert load("select").CtcControlSelect
+    assert load("switch").CtcDebugReportSwitch
 
 
 def test_skip_unless_stubbed_only_skips_under_a_real_core():

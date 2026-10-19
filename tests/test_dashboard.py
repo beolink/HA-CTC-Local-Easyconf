@@ -701,8 +701,9 @@ def test_every_key_on_the_page_is_a_unique_id_the_integration_creates(dashboard_
     assert 'unique_id(runtime.device, f"aux_share_{span}")' in _source("sensor.py")
     created |= {f"aux_share_{span}" for span in load("cop").SHARE_SPANS}
     # Entities with a key of their own, spelled out in the unique id: the
-    # button, the sensor that accounts for the display harvest, and the events.
-    for name in ("button.py", "sensor.py", "event.py"):
+    # button, the sensor that accounts for the display harvest, the events and
+    # the debug report's switch.
+    for name in ("button.py", "sensor.py", "event.py", "switch.py"):
         created |= set(re.findall(r'unique_id\(runtime\.device, "([a-z_]+)"\)', _source(name)))
     # The transitions' sensors are a table in transitions.py (R27, R31), and
     # the mean run over a day is the one sensor beside it.

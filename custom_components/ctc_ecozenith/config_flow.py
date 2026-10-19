@@ -35,6 +35,7 @@ from .catalogue import (
 )
 from .const import (
     CONF_CHECK_UPDATES,
+    CONF_DEBUG_REPORT,
     CONF_DEVICE_KEY,
     CONF_DISPLAY,
     CONF_ENABLE_CONTROL,
@@ -63,6 +64,7 @@ from .const import (
     MIN_SLOW_INTERVAL,
     has_display,
 )
+from .debug_report import debug_report_on, only_the_debug_report_changes
 from .discovery import (
     FAMILY,
     DiscoveredDisplay,
@@ -107,6 +109,23 @@ STATS_PLACEHOLDERS = {
 #: confirmation of a discovered unit say it in one sentence and link here.
 EXPOSURE_PLACEHOLDERS = {
     "exposure_url": "https://github.com/beolink/HA-CTC-Local-Easyconf#network-and-exposure",
+}
+
+#: What the first form of Configure offers for a setting the options do not
+#: hold yet, which is also what the integration does without it. An entry
+#: that was never saved there lacks most of them, and the form writes every
+#: field it has: a setting written with this value is no change, so a save
+#: that changes nothing else in effect writes the debug report alone and
+#: reloads nothing (_async_save).
+FIRST_FORM_DEFAULTS: dict[str, Any] = {
+    CONF_FAST_INTERVAL: DEFAULT_FAST_INTERVAL,
+    CONF_SLOW_INTERVAL: DEFAULT_SLOW_INTERVAL,
+    CONF_RESTORE_PAGE: True,
+    CONF_ENABLE_CONTROL: True,
+    CONF_VISIT_SYSTEM_INFO: True,
+    CONF_CHECK_UPDATES: True,
+    CONF_SEND_STATISTICS: True,
+    CONF_DEBUG_REPORT: False,
 }
 
 CONF_PICKED = "picked"
@@ -854,6 +873,9 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
                     user_input.get(CONF_ENABLE_CONTROL, options.get(CONF_ENABLE_CONTROL, True))
                 ),
                 CONF_SEND_STATISTICS: bool(user_input.get(CONF_SEND_STATISTICS, True)),
+                CONF_DEBUG_REPORT: bool(
+                    user_input.get(CONF_DEBUG_REPORT, debug_report_on(options))
+                ),
             }
             if user_input.get("rescan") and user_input.get(CONF_FIND_PAGE):
                 # Each walks the panel, and one after the other in one dialog
@@ -930,6 +952,8 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
                     CONF_SEND_STATISTICS,
                     default=options.get(CONF_SEND_STATISTICS, True),
                 ): bool,
+                # The switch on the CTC page is the same setting (switch.py).
+                vol.Optional(CONF_DEBUG_REPORT, default=debug_report_on(options)): bool,
                 vol.Optional("rescan", default=False): bool,
                 # Only where there is a display to search (roadmap L7).
                 **(
@@ -947,13 +971,19 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
     async def _async_save(
         self, changes: dict[str, Any], data: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Write the options, which reloads the entry.
+        """Write the options, which reloads the entry unless the debug report is all that changed.
 
         Switching the statistics off erases what has already been sent, rather
         than merely going quiet, and that happens here, at the save, so that a
         form abandoned on the way, at a busy panel for one, changes nothing.
         Imported here rather than at the top: stats.py pulls in Home
         Assistant, and this module is read by tests that run without it.
+
+        A save that changes nothing in effect but the debug report, a setting
+        the options lacked written with the value it already had counting as
+        no change (FIRST_FORM_DEFAULTS), writes the debug report alone over
+        the stored options, and the reload listener leaves a write of it
+        alone: a reload can cost the pump's one Modbus place for minutes.
 
         New entry data, where there is any, goes in the same write as the
         options, so the entry reloads once: the options the flow then hands
@@ -964,7 +994,13 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
             from .stats import async_forget_install
 
             await async_forget_install(self.hass, self._entry, DOMAIN)
-        options = {**self._entry.options, **changes}
+        stored = self._entry.options
+        options = {**stored, **changes}
+        if data is None and only_the_debug_report_changes(stored, options, FIRST_FORM_DEFAULTS):
+            wanted = debug_report_on(options)
+            options = dict(stored)
+            if wanted != debug_report_on(stored):
+                options[CONF_DEBUG_REPORT] = wanted
         if data is not None:
             self.hass.config_entries.async_update_entry(self._entry, data=data, options=options)
         return self.async_create_entry(title="", data=options)

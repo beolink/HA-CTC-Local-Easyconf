@@ -87,6 +87,7 @@
           "restore_page": "Put the panel back afterwards",
           "enable_control": "Allow controlling the heat pump",
           "send_statistics": "Send anonymous usage statistics",
+          "debug_report": "Report all values to the developer",
           "rescan": "Read the display's menu again",
           "slow_pages": "Pages to read",
           "visit_system_info": "Let the integration open System information on the panel",
@@ -96,6 +97,7 @@
         "data_description": {
           "enable_control": "Creates control entities that write to CTC's volatile 1000 registers. The controller forgets them about five minutes after the last write, so control releases itself if Home Assistant stops. The stored settings in the 61500 block are never written.",
           "send_statistics": "One report per day to {endpoint}: the integration's version, the Home Assistant version, installation type and Python version, the language and the country you configured in Home Assistant, an approximate position rounded to about 11 km, the number of entities and devices, which transports are in use, whether control is enabled, how many display pages are harvested, how many pages the display's menu has and whether the last reading of the menu since Home Assistant started recognised the home screen and got into the operation data menu, whether the row with the unit's operating hours was recognised on the history page, whether the counters behind the coefficient of performance were found on the display or in Modbus and whether each handed over a number at the last read, and when there is no figure, why: too little energy counted so far, a counter standing still although the unit has been running, or a quotient no heat pump could produce, whether the heat pump's page carries the two power rows at all and whether they handed over numbers at the last read, which a heat pump switched off does not, and whether the figure is worked out from the integration's own sums of the two power readings instead of from the machine's counters. Also the number of failed register reads, the indoor and outdoor unit's model, for an indoor unit the integration does not know yet the family code in the name of the display's settings file (such as ezi4xx, two to sixteen lowercase letters and digits, nothing else), the firmware in the display, the heat pump's control board and the control unit, the product and the year and week of manufacture from the serial number, and the coefficient of performance (COP) over the last day, a rolling year, the machine's first year and the lifetime. One measurement leaves the house, and only when it is wrong: where a counter stands still or the two counters give an impossible quotient, the two lifetime totals in kilowatt hours are sent along with the flag, never otherwise. Never a name, an address, an exact position, a full serial number, an entity name or a page name, never anything finer than one day, and your IP address is not stored. It also sends a random id created when the integration was installed, so that the daily reports can be kept apart and erased on request (the server keeps it only as a hash, and it says nothing about who you are), a hash that links the beolink plugins running on the same Home Assistant, how many warnings and errors the integration logged since the previous report, and whether it is running or waiting to start again, never the messages themselves or the reason. Switching this off stops the reporting, and the installation is marked as having stopped. What has already been sent stays: it is anonymous, carries no free text and is stored per day, and which installations have existed is what the statistics are for. Erasure on request, from whoever runs the service. The full list: {privacy_url}",
+          "debug_report": "Every 30 minutes while it is on, and once when it is switched on, sends what Download diagnostics holds to {endpoint}: every display and Modbus value, how the readings went and when each row was last read, and the integration's own warnings and errors from its log, never a whole traceback. IP addresses, MAC addresses, the serial number's running number and host names are washed out before anything leaves the house, and the server washes them out again. The reports are kept for 14 days and erased on request. Off by default, and independent of the anonymous statistics: the one does not need the other. Switch it off at any time, here or with its switch on the CTC page, which is the same setting. Switching it on or off takes effect at once, without reloading the integration.",
           "visit_system_info": "The panel walks to the display's System information page once and back, to read the serial number and the display's own software version. It presses nothing but Advanced, Display and System information, checks where the panel went after every press, and gives up at the first surprise.",
           "check_updates": "Asks GitHub once a day whether a newer release of this integration exists, and says so in the repairs view. Home Assistant only offers updates for what HACS installed, so a copy put in place by hand is otherwise never offered one.",
           "slow_pages": "The figure after each page is how many values it holds.",
@@ -566,6 +568,11 @@
       },
       "tank_lower_setpoint": {
         "name": "Lower tank setpoint"
+      }
+    },
+    "switch": {
+      "debug_report": {
+        "name": "Report all values to the developer"
       }
     }
   }

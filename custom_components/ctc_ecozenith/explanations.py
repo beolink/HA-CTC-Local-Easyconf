@@ -914,6 +914,27 @@ IDENTITY: dict[str, Text] = {
     ),
 }
 
+#: The integration's own settings, which act on the integration rather than on
+#: the heat pump.
+OWN: dict[str, Text] = {
+    "debug_report": Text(
+        "Skickar det som Hämta diagnostik innehåller till utvecklaren på stats.rnet.se var 30:e "
+        "minut så länge den är påslagen, och en gång när den slås på: alla display- och "
+        "Modbus-värden, hur läsningarna gick, och integrationens egna varningar och fel ur loggen. "
+        "IP-adresser, MAC-adresser, serienumrets löpnummer och värdnamn tvättas bort innan något "
+        "lämnar huset. Rapporterna sparas i 14 dagar och raderas på begäran. Av som förval och "
+        "oberoende av den anonyma statistiken. Samma inställning som under Konfigurera, och att "
+        "slå på eller av den laddar inte om integrationen.",
+        "Sends what Download diagnostics holds to the developer at stats.rnet.se every 30 "
+        "minutes while it is on, and once when it is switched on: every display and Modbus "
+        "value, how the readings went, and the integration's own warnings and errors from its "
+        "log. IP addresses, MAC addresses, the serial number's running number and host names are "
+        "washed out before anything leaves the house. The reports are kept for 14 days and "
+        "erased on request. Off by default and independent of the anonymous statistics. The same "
+        "setting as under Configure, and switching it on or off does not reload the integration.",
+    ),
+}
+
 _REGISTERS = {d.key: d.address for d in MODBUS_SENSORS + MODBUS_SETTINGS}
 _CONTROL_REGISTERS = {r.key: r.address for r in CONTROL_NUMBERS + CONTROL_SELECTS}
 _SETTINGS = {d.key for d in MODBUS_SETTINGS}
@@ -1332,7 +1353,7 @@ def display_explanation(
 
 
 #: Every table of explanations by key, in the order explain looks through them.
-TABLES: tuple[dict[str, Text], ...] = (MODBUS, CONTROL, DERIVED, IDENTITY, HARVEST)
+TABLES: tuple[dict[str, Text], ...] = (MODBUS, CONTROL, DERIVED, IDENTITY, HARVEST, OWN)
 
 
 def explain(key: str, lang: str | None = SWEDISH) -> str | None:
@@ -1354,6 +1375,10 @@ _DERIVED_FROM_TRANSITIONS = Text(
 )
 _SOURCES: dict[str, Text] = {
     "release_control": Text("Knapp i Home Assistant", "A button in Home Assistant"),
+    "debug_report": Text(
+        "Integrationens inställning, samma som under Konfigurera",
+        "The integration's setting, the same as under Configure",
+    ),
     "active_overrides": Text(
         "Räknas fram ur det Home Assistant skriver till pumpens flyktiga styrregister",
         "Worked out from what Home Assistant writes to the heat pump's volatile control registers",

@@ -163,7 +163,7 @@ def test_the_manifest_claims_no_tier_the_checklist_does_not_meet():
 # look at what the comment names. A rule on todo has no test here: the check
 # runs the day the rule is marked done, and fails it if the code says otherwise.
 
-PLATFORMS = ("binary_sensor", "button", "event", "number", "select", "sensor")
+PLATFORMS = ("binary_sensor", "button", "event", "number", "select", "sensor", "switch")
 
 
 def _function(module: ast.Module, name: str) -> ast.AsyncFunctionDef | None:

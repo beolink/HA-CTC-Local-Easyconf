@@ -419,7 +419,8 @@ behalf, and the integration leaves that choice alone.
 ## Options
 
 Under *Settings, Devices and services, CTC Local Easyconf, Configure*. Saving
-the form reloads the entry.
+the form reloads the entry, unless *Report all values to the developer* is all
+that changed: that one is applied without a reload.
 
 | Option | From the start | What it does |
 |---|---|---|
@@ -431,6 +432,7 @@ the form reloads the entry.
 | Let the integration open System information on the panel | on | The one walk to the page with the serial number and the display's software version; see [Setup](https://github.com/beolink/HA-CTC-Local-Easyconf#setup). |
 | Tell me when a new version is released | on | Asks GitHub once a day and says so in the repairs view. |
 | Send anonymous usage statistics | on | One report a day; see [Anonymous statistics](https://github.com/beolink/HA-CTC-Local-Easyconf#anonymous-statistics). Switching it off stops the reporting; what was sent stays. |
+| Report all values to the developer | off | Sends what *Download diagnostics* holds, and the integration's own warnings and errors, every 30 minutes until it is switched off; see [Debug report](https://github.com/beolink/HA-CTC-Local-Easyconf#debug-report). The same setting as the switch on the CTC page, and switching it reloads nothing. |
 | Read the display's menu again | off | Walks the menu now and offers the pages again on the next form; see [The catch with the display](https://github.com/beolink/HA-CTC-Local-Easyconf#the-catch-with-the-display-and-what-the-integration-does-about-it). |
 | Search for the way to a page | off | For a page the reading of the menu does not reach: asks for its number on the next form and searches for the way there once, with somebody at the panel. Offered where the entry has a display; see [The catch with the display](https://github.com/beolink/HA-CTC-Local-Easyconf#the-catch-with-the-display-and-what-the-integration-does-about-it). |
 
@@ -505,7 +507,10 @@ it is never out of date. Each heat pump gets four tabs.
   list, a setpoint slid or typed, grouped by what it does to the house rather
   than by entity domain: heating, hot water, operation and power. Letting go of
   every override at once is the last row under operation and power, and its
-  explanation says why it exists.
+  explanation says why it exists. Last of all, under **Troubleshooting**
+  (*Felsökning*), is a tick box, **Report all values to the developer**
+  (*Rapportera alla värden till utvecklaren*), there whether control is on or
+  off; see [Debug report](#debug-report).
 - **Performance.** How the pump has run: the flow against its setpoint and the
   compressor over a day, energy, the compressor's running time and the
   coefficient of performance per day over a month, a bar per day, and then
@@ -637,7 +642,7 @@ sections are those of the page, by tab:
 | Tab | `section` |
 |---|---|
 | Overview | `status`, `overrides`, `quick_controls`, `key_readings` |
-| Controls | `heating_controls`, `hot_water_controls`, `power_controls` |
+| Controls | `heating_controls`, `hot_water_controls`, `power_controls`, `troubleshooting` |
 | Performance | `temperatures`, `hot_water`, `energy`, `compressor`, `cycles`, `settings`, `unit`, `other` |
 | All values | `values` |
 
@@ -1073,6 +1078,59 @@ row and all its daily rows are deleted. The full list of fields and the reasonin
 <https://stats.rnet.se/integritet>. The code that builds the report is
 `stats_extra.py`, and the client that sends it is `stats.py`.
 
+## Debug report
+
+Some questions cannot be answered from the anonymous statistics, by design, nor
+from one diagnostics file: whether a coefficient of performance can be worked
+out on a model whose lifetime counters never move turns on what its display
+shows while the compressor runs, hour after hour. For that the integration can
+send everything it knows, to the developer, while you want it to.
+
+It is **off** until you switch it on, and once on it stays on until you switch
+it off. There are two places for the one setting: the tick box **Report all
+values to the developer** (*Rapportera alla värden till utvecklaren*) last on
+the CTC page's controls tab, under *Troubleshooting*, which is a switch of
+that name on the heat pump's device, and the option of the same name under
+*Configure*. Switching it on or off takes effect at once and
+does not reload the integration: a reload closes Modbus, and a set-up that
+meets the heat pump's one Modbus place still taken waits for it.
+
+While it is on, a report goes to <https://stats.rnet.se> a few seconds after it
+is switched on, two minutes after each start of the integration, also while
+the integration is still waiting for the heat pump to answer, and every 30
+minutes after that. Nothing is collected or sent while it is off. A report
+holds:
+
+- exactly what *Download diagnostics* gives (see
+  [Reporting a problem](#reporting-a-problem)): every value the display and
+  Modbus last gave, when each display row was last read, how the harvest and
+  the readings of the menu went, the Modbus block plan, the counters behind the
+  coefficient of performance, the latest transitions and the alarm log;
+- the integration's own warnings and errors from its log since the last report
+  the server stored, at most 200 lines of at most 2 000 characters each. An
+  error's traceback is not sent, only its type and message, since the lines of
+  a traceback name the files of your installation;
+- the random id the anonymous statistics already use for this installation,
+  read from `config/.storage/ctc_ecozenith.stats` and made there where it is
+  missing, so that the reports sit under the same installation; and the
+  versions of the integration and of Home Assistant.
+
+Before anything leaves the house it is washed as the diagnostics file is: the
+address, the device key, the MAC address, the entry's title and the device's
+link and identifiers are taken out, every IPv4 and MAC address in any text
+becomes a placeholder, the display's host name loses its digits, and the
+serial number is cut down to its product and week groups wherever it is spelt.
+The log is washed with the names of every heat pump of the integration, and
+the server washes all of it again before storing it. A report is at most a
+megabyte; the oldest log lines give way first.
+
+The reports are kept for 14 days and then deleted, sit behind the login at
+<https://stats.rnet.se> under the installation they came from, and are seen
+only by whoever runs the service. They are erased on request. The debug report
+is independent of the anonymous statistics: either can be on without the
+other. The code is `debug_report.py`, and what the integration logs about it
+is on debug level, apart from one info line when it starts.
+
 ## Reporting a problem
 
 When the display's menu cannot be read, the log says so once per start of Home
@@ -1107,6 +1165,9 @@ and week groups wherever it is spelt, the display's host name included. The
 code is `diagnostics_data.py`; read the file through before you attach it all
 the same.
 
+Where the developer asks for the values over a few hours rather than one file,
+switch on the [Debug report](#debug-report) for that while, and off again.
+
 ## Removing the integration
 
 *Settings, Devices and services, CTC Local Easyconf*, the three dots next to
@@ -1126,7 +1187,8 @@ dashboard of your own are deleted from that dashboard. What the anonymous
 statistics have already sent stays either way: removing the integration stops the
 reports, and so does switching *Send anonymous usage statistics* off under
 *Configure*, which also marks the installation as having stopped. Erasure is on
-request, from whoever runs the service. And the file `config/.storage/ctc_ecozenith.stats`, which
+request, from whoever runs the service. A debug report already sent is
+deleted by the server 14 days after it came, or sooner on request. And the file `config/.storage/ctc_ecozenith.stats`, which
 holds the installation's random id for those reports, one for all heat pumps
 together: delete it by hand once the last heat pump is removed, or an
 installation of the integration later on reports under the same id.

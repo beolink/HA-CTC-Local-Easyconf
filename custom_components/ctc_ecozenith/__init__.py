@@ -98,6 +98,11 @@ from .cop import (
     power_now,
     powered_on_hours,
 )
+from .debug_report import (
+    async_setup_debug_report,
+    async_stop_debug_report,
+    without_the_debug_report,
+)
 from .harvest import STORAGE_VERSION as HARVEST_STORAGE_VERSION, HarvestMemory
 from .identity import (
     Identity,
@@ -1045,6 +1050,22 @@ async def _async_arm_statistics(hass: HomeAssistant, entry: CtcConfigEntry) -> N
         _LOGGER.debug("Could not arm the statistics reporter", exc_info=True)
 
 
+async def _async_arm_debug_report(hass: HomeAssistant, entry: CtcConfigEntry) -> None:
+    """Arm the voluntary debug report, right after the daily one and for the same reason.
+
+    Off unless the owner switches it on, and then it reports while the
+    controller is away as much as while it answers: armed before the first
+    Modbus call, stopped only from async_unload_entry and async_remove_entry.
+    It follows its option by itself, as a listener of the entry's own, so a
+    switch of it reloads nothing; see debug_report.py.
+    """
+    try:
+        integration = await async_get_integration(hass, DOMAIN)
+        async_setup_debug_report(hass, entry, str(integration.version))
+    except Exception:  # the debug report must never break a set-up
+        _LOGGER.debug("Could not arm the debug report", exc_info=True)
+
+
 @callback
 def _async_move_row_keys(
     hass: HomeAssistant, entry: CtcConfigEntry, prefix: str, moves: dict[str, str]
@@ -1221,6 +1242,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
     options = entry.options
 
     await _async_arm_statistics(hass, entry)
+    await _async_arm_debug_report(hass, entry)
     # The sidebar page, before the first Modbus call for the same reason as the
     # report: a controller that is away keeps the entry retrying, and the page
     # should say so rather than vanish from the sidebar.
@@ -1596,31 +1618,42 @@ def _takes_a_reload(
 
     One rule, for the listener and for the task that writes from the inside
     and has to know whether its write ends it. The entry's data and every
-    option but the identity, and the screens the identity was found on, are
-    somebody's choice and take a reload to come into force. Those two are
-    written from the inside, by _async_adopt_identity and _async_catch_up,
-    and change nothing about what is polled, so a write that differs from
-    what this set-up was built from in nothing else is left alone.
+    option but the identity, the screens the identity was found on and the
+    debug report are somebody's choice and take a reload to come into force.
+    The first two are written from the inside, by _async_adopt_identity and
+    _async_catch_up, and change nothing about what is polled. The debug report
+    is the owner's choice, and its reporter follows it by itself (debug_report.py):
+    a reload for it would close Modbus, and a set-up that meets the controller's
+    one place still taken waits for it. So a write that differs from what this
+    set-up was built from in nothing else is left alone; the debug report is
+    taken out of both sides before the identity's rule compares them.
     """
     if dict(entry.data) != runtime.applied_data:
         return True
-    return not only_identity_differs(runtime.applied_options, options)
+    return not only_identity_differs(
+        without_the_debug_report(runtime.applied_options), without_the_debug_report(options)
+    )
 
 
 async def _async_reload(hass: HomeAssistant, entry: CtcConfigEntry) -> None:
-    """Reload on a change of the entry, unless only the identity filled itself in.
+    """Reload on a change of the entry, unless only the identity or the debug report changed.
 
     Home Assistant calls this for every write of the entry. A write that
     changes nothing but CONF_IDENTITY comes from _async_adopt_identity, which
     has already told everything that reads the identity, and a reload would
     only cost what is listed there; one that changes nothing but the screens
-    comes from _async_catch_up, which carries on by itself. A change of the
-    host or of any other option is somebody's choice and takes a reload to
-    come into force. The rule is _takes_a_reload.
+    comes from _async_catch_up, which carries on by itself; one that changes
+    nothing but the debug report comes from its switch or from Configure, and
+    its reporter, a listener of the entry's as well, applies it in place. A
+    change of the host or of any other option is somebody's choice and takes
+    a reload to come into force. The rule is _takes_a_reload.
     """
     runtime = getattr(entry, "runtime_data", None)
     if runtime is not None and not _takes_a_reload(entry, runtime, entry.options):
-        _LOGGER.debug("The identity was written to the entry; nothing to reload for")
+        _LOGGER.debug(
+            "Only the identity or the debug report was written to the entry; nothing to "
+            "reload for"
+        )
         return
     await hass.config_entries.async_reload(entry.entry_id)
 
@@ -1631,8 +1664,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool
     if unloaded:
         runtime = entry.runtime_data
         # Only here, never from an on-unload callback: those also run when a
-        # set-up attempt fails, and the report has to survive that.
+        # set-up attempt fails, and the report has to survive that. The debug
+        # report the same way; the lines it has not sent wait for the next
+        # set-up.
         await async_stop_stats(hass, entry, DOMAIN)
+        async_stop_debug_report(hass, entry)
         # The keepalive first, so that no write of this entry's is queued
         # behind the shutdown; then the client, for good. A reload builds the
         # next client at once, and a connection the old entry opened after
@@ -1664,6 +1700,10 @@ async def async_remove_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> None
         ir.async_delete_issue(hass, DOMAIN, f"{entry.entry_id}_{key}")
     # No set-up of this entry will borrow its panel lock again.
     _PANEL_LOCKS.pop(entry.entry_id, None)
+    # The debug report goes with the entry, and so do the lines it had not
+    # sent. Its reporter is still armed where the entry waited for another
+    # set-up attempt, which never reaches async_unload_entry.
+    async_stop_debug_report(hass, entry, keep_lines=False)
     # What the unit was seen to have, what its display last gave, the energy
     # counters behind the coefficient of performance and what it alarmed
     # about belong to this entry alone, and go with it.

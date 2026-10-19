@@ -136,7 +136,7 @@ SWEDISH_AT_0_21_1 = {
 }
 
 FILES = ("strings.json", "translations/en.json", "translations/sv.json")
-PLATFORMS = ("binary_sensor", "button", "event", "number", "select", "sensor")
+PLATFORMS = ("binary_sensor", "button", "event", "number", "select", "sensor", "switch")
 
 
 def _entity(name: str) -> dict[str, dict[str, dict]]:
@@ -220,6 +220,7 @@ def _keys_in_code(const, transitions) -> dict[str, set[str]]:
         "select": {r.key for r in const.CONTROL_SELECTS},
         "button": {"release_control"},
         "event": {"events"},
+        "switch": {"debug_report"},
     }
 
 

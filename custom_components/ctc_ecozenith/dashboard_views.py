@@ -28,7 +28,9 @@ Each pump gets four tabs, in the order the questions come:
                handful of controls worth reaching for, a day of the circuit, and the
                key figures as large numbers.
   Controls     Everything writable, grouped by what it does to the house rather than
-               by entity domain: heating, hot water, operation and power.
+               by entity domain: heating, hot water, operation and power, and last
+               the integration's own switch for the debug report, under
+               troubleshooting, whether control is on or off.
   Performance  How the pump has run: the graphs, and then every reading in its own
                section, which is what the page carried before the tabs.
   All values   The full list, every value the installation offers, in as many columns
@@ -198,6 +200,13 @@ _QUICK_CONTROLS = ("ctl_room_setpoint_1", "ctl_dhw_mode", "ctl_extra_dhw", "ctl_
 #: button that lets go of all of it (R49).
 _OVERRIDES = "active_overrides"
 _RELEASE_ALL = "release_control"
+#: The switch of the voluntary debug report (switch.py), Rapportera alla värden
+#: till utvecklaren: a tick box on the controls tab, under a heading of its own
+#: and last, since it does nothing to the house. It is there whether control
+#: is on or off: the owner's choice to report has nothing to do with whether
+#: Home Assistant may steer the pump.
+_DEBUG_REPORT = "debug_report"
+_TROUBLESHOOTING = ("troubleshooting", "mdi:bug-outline", (_DEBUG_REPORT,))
 #: The overrides chip's colour, one of the theme's four the chips card knows:
 #: Home Assistant holding the pump is worth seeing, not an alarm.
 _OVERRIDES_COLOUR = "info"
@@ -329,6 +338,7 @@ _VALUE_GROUPS = (
     ("status", ICON, _STATUS_TILES + _STATUS_ROWS + _EVENT_ROWS + ("last_alarm",)),
     ("control", "mdi:tune-variant",
      (_OVERRIDES, *(k for _id, _icon, keys in _CONTROL_GROUPS for k in keys))),
+    _TROUBLESHOOTING,
     *_READINGS,
     *_TECHNICAL,
 )
@@ -358,6 +368,7 @@ TEXT = {
         "heating": "Värme",
         "power": "Drift och el",
         "control": "Styrning",
+        "troubleshooting": "Felsökning",
         "compressor": "Kompressor och köldkrets",
         "cycles": "Starter, körningar och avfrostningar",
         "settings": "Pumpens inställningar",
@@ -470,6 +481,7 @@ TEXT = {
         "heating": "Heating",
         "power": "Operation and power",
         "control": "Control",
+        "troubleshooting": "Troubleshooting",
         "compressor": "Compressor and refrigerant circuit",
         "cycles": "Starts, runs and defrosts",
         "settings": "Settings in the heat pump",
@@ -1132,18 +1144,20 @@ def _graph_section(
 def controls_sections(
     pump: Mapping[str, Any], text: Mapping[str, str], ha_version: tuple[int, int]
 ) -> list[dict[str, Any]]:
-    """Everything writable, grouped by what it does to the house."""
+    """Everything writable, grouped by what it does to the house, and the debug report last."""
     build = _Builder(pump, text, ha_version)
     sections = [
         _section(_heading(text[group], icon), [build.controls(keys)])
         for group, icon, keys in _CONTROL_GROUPS
     ]
     found = [section for section in sections if section]
-    if found:
-        return found
-    # Nothing writable: either control is off, or every control entity is.
-    note = text["control_off"] if not pump.get("control_enabled") else text["no_controls"]
-    return [_section(_heading(text["control"], "mdi:tune-variant"), [_note(note)])]
+    if not found:
+        # Nothing writable: either control is off, or every control entity is.
+        note = text["control_off"] if not pump.get("control_enabled") else text["no_controls"]
+        found = [_section(_heading(text["control"], "mdi:tune-variant"), [_note(note)])]
+    group, icon, keys = _TROUBLESHOOTING
+    debug = _section(_heading(text[group], icon), [build.controls(keys)])
+    return [*found, debug] if debug else found
 
 
 def performance_sections(

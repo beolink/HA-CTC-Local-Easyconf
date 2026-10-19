@@ -73,6 +73,13 @@ CONF_FAST_INTERVAL: Final = "fast_interval"
 # Must match OPTION_KEY in stats.py. Kept here so config_flow can build its
 # schema without importing stats.py, which pulls in Home Assistant.
 CONF_SEND_STATISTICS: Final = "send_statistics"
+#: Whether the voluntary debug report goes out: what the diagnostics download
+#: holds and the integration's own warnings and errors, every half hour, to
+#: stats.rnet.se (debug_report.py). Off unless the owner switches it on, under
+#: Configure or with its switch on the CTC page, which are the one setting;
+#: once on it stays on until switched off. Applied in place, never by a
+#: reload, and independent of the anonymous statistics.
+CONF_DEBUG_REPORT: Final = "debug_report"
 
 DEFAULT_FAST_INTERVAL: Final = 30
 DEFAULT_SLOW_INTERVAL: Final = 1800
@@ -196,8 +203,9 @@ HARVEST_PATIENCE: Final = 3
 HARVEST_SKIP_LIMIT: Final = 2
 
 #: The event platform carries the heat pump's transitions (event.py). It has
-#: been in Home Assistant since 2023.8, well inside hacs.json's floor.
-PLATFORMS: Final = ["sensor", "binary_sensor", "number", "select", "button", "event"]
+#: been in Home Assistant since 2023.8, well inside hacs.json's floor. The
+#: switch platform carries the debug report's one switch (switch.py).
+PLATFORMS: Final = ["sensor", "binary_sensor", "number", "select", "button", "event", "switch"]
 
 CONF_IDENTITY: Final = "identity"
 

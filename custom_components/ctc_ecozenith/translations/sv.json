@@ -87,6 +87,7 @@
           "restore_page": "Ställ tillbaka panelen efteråt",
           "enable_control": "Tillåt styrning av värmepumpen",
           "send_statistics": "Skicka anonym användningsstatistik",
+          "debug_report": "Rapportera alla värden till utvecklaren",
           "rescan": "Läs om displayens meny",
           "slow_pages": "Sidor att hämta",
           "visit_system_info": "Låt integrationen öppna Systeminformation på panelen",
@@ -96,6 +97,7 @@
         "data_description": {
           "enable_control": "Skapar styrentiteter som skriver till CTC:s flyktiga 1000-register. De nollställs av pumpen cirka fem minuter efter sista skrivningen, så styrningen släpper av sig själv om Home Assistant stannar. De lagrade inställningarna i 61500-serien rörs aldrig.",
           "send_statistics": "En rapport per dygn till {endpoint}: integrationens version, Home Assistant-version, installationstyp och Python-version, språket och landet du ställt in i Home Assistant, en ungefärlig plats avrundad till cirka 11 km, antal entiteter och enheter, vilka transporter som används, om styrning är påslagen, hur många displaysidor som hämtas, hur många sidor displayens meny har och om senaste läsningen av menyn sedan Home Assistant startade kände igen hemskärmen och kom in i driftinfomenyn, om raden med total drifttid kändes igen på historiksidan, om räknarna bakom värmefaktorn hittades på displayen eller i Modbus och om var och en lämnade ett tal vid senaste läsningen, samt när värmefaktorn saknas varför: för lite energi räknad ännu, en räknare som står still fast enheten varit igång, eller en kvot ingen värmepump kan ge, om värmepumpens sida alls bär de två effektraderna och om de lämnade tal vid senaste läsningen, vilket en avstängd värmepump inte gör, samt om värmefaktorn räknas ur integrationens egen summering av de två effektvärdena i stället för ur maskinens räknare. Dessutom antal misslyckade registeravläsningar, innedelens och utedelens modell, för en innedel integrationen inte känner till ännu familjekoden i namnet på displayens inställningsfil (till exempel ezi4xx, två till sexton små bokstäver och siffror, inget annat), programversionen i displayen, värmepumpens styrkort och styrenheten, produkt samt tillverkningsår och tillverkningsvecka ur serienumret, och värmefaktorn (COP) för senaste dygnet, rullande år, maskinens första år och hela livslängden. Ett mätvärde lämnar huset, och bara när det är fel: står en räknare still eller ger de två räknarna en omöjlig kvot skickas de två livstidsräknarna i kilowattimmar tillsammans med flaggan, aldrig annars. Aldrig namn, adress, exakt position, fullständigt serienummer, entitetsnamn eller sidnamn, aldrig något finare än ett dygn, och din IP-adress sparas inte. Dessutom skickas ett slumpat id som skapas vid installationen, så att dygnsrapporterna kan hållas isär och raderas på begäran (servern sparar det bara som en hash, och det säger inget om vem du är), en hash som knyter ihop beolinks plugin på samma Home Assistant, hur många varningar och fel integrationen loggat sedan förra rapporten, och om den är igång eller väntar på att starta igen, aldrig själva meddelandena eller skälet. Stänger du av den slutar rapporteringen, och installationen märks som avanmäld. Det som redan skickats står kvar: det är anonymt, bär ingen fritext och lagras per dygn, och vilka anläggningar som funnits är det statistiken är till för. Radering på begäran, av den som driver tjänsten. Hela listan: {privacy_url}",
+          "debug_report": "Skickar var 30:e minut så länge den är påslagen, och en gång när den slås på, det som Hämta diagnostik innehåller till {endpoint}: alla display- och Modbus-värden, hur läsningarna gick och när varje rad senast lästes, och integrationens egna varningar och fel ur loggen, aldrig en hel felspårning. IP-adresser, MAC-adresser, serienumrets löpnummer och värdnamn tvättas bort innan något lämnar huset, och servern tvättar bort dem en gång till. Rapporterna sparas i 14 dagar och raderas på begäran. Av som förval, och oberoende av den anonyma statistiken: den ena behöver inte den andra. Stäng av den när du vill, här eller med reglaget på CTC-sidan, som är samma inställning. Att slå på eller av den gäller direkt, utan att integrationen laddas om.",
           "visit_system_info": "Panelen går till displayens sida Systeminformation en gång och tillbaka igen, för att läsa serienummer och displayens egen programversion. Den trycker bara på Avancerat, Display och Systeminformation, kontrollerar var panelen hamnade efter varje tryck och avbryter vid minsta avvikelse.",
           "check_updates": "Frågar GitHub en gång om dygnet om det finns en nyare release av integrationen, och säger till i reparationsvyn. Home Assistant erbjuder bara uppdateringar för det HACS installerat, så en kopia som lagts dit för hand får annars aldrig någon.",
           "slow_pages": "Talet efter varje sida är hur många värden den har.",
@@ -566,6 +568,11 @@
       },
       "tank_lower_setpoint": {
         "name": "Nedre tank börvärde"
+      }
+    },
+    "switch": {
+      "debug_report": {
+        "name": "Rapportera alla värden till utvecklaren"
       }
     }
   }
