@@ -422,6 +422,50 @@ def test_the_device_key_of_a_moved_entry_is_taken_out_as_well(diagnostics_data, 
     assert "192.0.2" not in text and "#2" not in text
 
 
+@pytest.mark.parametrize(
+    ("said", "washed"),
+    [
+        # An address that ends a sentence: the full stop after it used to keep
+        # it out of the IPv4 pattern, which took the dot for a fifth group.
+        ("Cannot connect to host 10.1.2.3.", "Cannot connect to host **REDACTED**."),
+        ("gave up on 198.51.100.7. Trying again", "gave up on **REDACTED**. Trying again"),
+        # A MAC address with a colon after it, as a message that names a
+        # device before saying what it did: the colon used to read as a
+        # seventh group.
+        ("02:00:00:00:00:02: no answer", "**REDACTED**: no answer"),
+        ("02-00-00-00-00-02: no answer", "**REDACTED**: no answer"),
+        ("seen 02:00:00:00:00:02.", "seen **REDACTED**."),
+    ],
+)
+def test_an_address_before_a_full_stop_and_a_mac_before_a_colon_are_washed(
+    diagnostics_data, said, washed
+):
+    # The patterns every installation is washed with, without its own secrets.
+    assert diagnostics_data.Secrets().wash_text(said) == washed
+
+
+def test_the_installations_own_address_and_name_are_washed_before_a_full_stop(
+    diagnostics_data, const
+):
+    secrets = diagnostics_data.Secrets("varmepump.lan", SERIAL, MAC, HOST)
+    assert secrets.wash_text(f"no answer from {HOST}.") == "no answer from **REDACTED**."
+    assert secrets.wash_text("no answer from varmepump.lan.") == "no answer from **REDACTED**."
+    assert secrets.wash_text(f"{MAC}: gone") == "**REDACTED**: gone"
+    # Neither is washed out of something longer it is only the start of.
+    assert secrets.wash_text("varmepump.lan.example") == "varmepump.lan.example"
+    assert secrets.wash_text("version 1.2.3.4.5") == "version 1.2.3.4.5"
+    assert secrets.wash_text("aa:bb:cc:dd:ee:ff:00") == "aa:bb:cc:dd:ee:ff:00"
+
+
+def test_a_message_with_both_shapes_leaves_the_download_washed(diagnostics_data, const):
+    note = {"note": f"Cannot reach {HOST}. {MAC}: no answer from 10.1.2.3."}
+    found, text = dump(diagnostics_data, data(const), note, None)
+    assert found["entry"]["options"]["note"] == (
+        "Cannot reach **REDACTED**. **REDACTED**: no answer from **REDACTED**."
+    )
+    assert HOST not in text and MAC not in text and "10.1.2.3" not in text
+
+
 # ------------------------------------------------------------- the shell
 
 

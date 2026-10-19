@@ -66,8 +66,17 @@ SAMPLES_SHOWN = 7
 #: The serial number's sequence group, replaced wherever it is spelt out.
 SEQUENCE_PLACEHOLDER = "XXXX"
 
-_IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
-_MAC = re.compile(r"(?<![0-9A-Fa-f:-])[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}(?![0-9A-Fa-f:-])")
+#: Four groups of digits, not inside a longer run of them: a digit or a dot and
+#: a digit may not stand on either side, but a full stop that ends a sentence
+#: may follow, "could not reach 192.0.2.55.", and a dot may come before.
+_IPV4 = re.compile(r"(?<!\d)(?<!\d\.)(?:\d{1,3}\.){3}\d{1,3}(?!\d|\.\d)")
+#: Six pairs of hex digits set apart by a colon or a dash, not inside a longer
+#: run of them: a hex digit, or a separator and a hex digit, may not stand on
+#: either side, but a separator alone may follow, "02:00:00:00:00:01: gone".
+_MAC = re.compile(
+    r"(?<![0-9A-Fa-f])(?<![0-9A-Fa-f][:-])[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}"
+    r"(?![0-9A-Fa-f]|[:-][0-9A-Fa-f])"
+)
 #: Three groups of four digits, run together or set apart by a space or a dash:
 #: how CTC writes a serial number, and how it ends up in a title or a message.
 _SERIAL = re.compile(r"(?<!\d)(\d{4})[ -]?(\d{4})[ -]?(\d{4})(?!\d)")
@@ -88,9 +97,10 @@ class Secrets:
         # The device key first: a key of its own is the address with a number
         # after it, "192.0.2.55#2", and goes whole rather than leaving "#2".
         for name in dict.fromkeys(str(found) for found in (key, host) if found):
-            # As a whole token, so a short host name does not eat into words.
+            # As a whole token, so a short host name does not eat into words,
+            # though a full stop that ends a sentence may follow it.
             self.patterns.append(
-                re.compile(r"(?<![\w.-])" + re.escape(name) + r"(?![\w.-])", re.I)
+                re.compile(r"(?<![\w.-])" + re.escape(name) + r"(?![\w-]|\.[\w-])", re.I)
             )
         if mac:
             hexes = re.sub(r"[^0-9A-Fa-f]", "", str(mac))
