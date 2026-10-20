@@ -48,6 +48,11 @@ def _module(name: str, package: bool = False) -> types.ModuleType:
     return module
 
 
+def async_call_later(hass, delay, action):
+    """Nothing is scheduled under the stand-in; the cancel does nothing either."""
+    return lambda: None
+
+
 def async_track_time_interval(hass, action, interval):
     """Record the timer instead of starting it; the undo takes the record away."""
     entry = (action, interval)
@@ -112,6 +117,10 @@ def install() -> bool:
         pass
 
     class CoordinatorEntity:
+        #: An entity is given its hass when it is added; under the stand-in
+        #: nothing adds one.
+        hass = None
+
         def __init__(self, coordinator):
             self.coordinator = coordinator
 
@@ -121,6 +130,7 @@ def install() -> bool:
 
     event = _module("homeassistant.helpers.event")
     event.async_track_time_interval = async_track_time_interval
+    event.async_call_later = async_call_later
 
     # The identity sensors listen for a dispatcher signal; under the stand-in
     # nothing sends one, so connecting is a no-op that hands back an unsubscribe.

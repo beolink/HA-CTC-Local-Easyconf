@@ -186,8 +186,8 @@ class FakePanelDisplay:
     async def async_goto_page(self, target, route=None):
         return target == 22
 
-    async def async_alarm_candidates(self, screen, values):
-        return []
+    async def async_alarm_readout(self, screen, values):
+        return load("web_api").AlarmReading(False, [])
 
 
 @pytest.fixture()

@@ -55,6 +55,7 @@ from custom_components.ctc_ecozenith.const import (
     SlowValue,
 )
 from custom_components.ctc_ecozenith.harvest import MIN_FIRST_DELAY
+from custom_components.ctc_ecozenith.web_api import AlarmReading
 
 PAGE = 22
 SCREEN = 220
@@ -106,8 +107,9 @@ class ServingPanel(FakePanel):
     async def async_goto_home(self, hops: int = 6) -> int | None:
         return PAGE
 
-    async def async_alarm_candidates(self, screen: int, values) -> list[str]:
-        return list(ServingPanel.header)
+    async def async_alarm_readout(self, screen: int, values):
+        # The heat pump page carries an alarm: its header icon is picked by a variable.
+        return AlarmReading(True, list(ServingPanel.header))
 
 
 async def _set_up_with_the_page(hass):
@@ -289,7 +291,15 @@ async def test_the_alarm_the_panel_prints_becomes_a_sensor_and_an_episode(hass, 
     (episode,) = alarm.attributes["episoder"]
     assert episode["kod"] == "E017" and episode["slut"] is None and episode["utetemperatur"] == 7.2
 
-    # The next round shows no alarm: the episode is closed, the sensor keeps it.
+    # The panel shows it, so the display's alarm is on, confirmed, with the text as printed.
+    display = hass.states.get(_entity_id(hass, "binary_sensor", "display_alarm"))
+    assert display.state == "on"
+    assert display.attributes["kod"] == "E017" and display.attributes["visat"] == E017
+    assert display.attributes["bekräftad"] is True and display.attributes["confirmed"] is True
+    assert display.attributes["last_confirmed"]
+
+    # The next round reads every page that can show an alarm and sees none: the episode
+    # is closed, the sensor keeps it, and the display's alarm is off.
     ServingPanel.header = []
     await _harvest_again(hass, entry)
     last = hass.states.get(_entity_id(hass, "sensor", "last_alarm"))
@@ -297,12 +307,15 @@ async def test_the_alarm_the_panel_prints_becomes_a_sensor_and_an_episode(hass, 
     assert last.attributes["pågår"] == "nej" and last.attributes["slut"]
     alarm = hass.states.get(_entity_id(hass, "binary_sensor", "alarm"))
     assert alarm.attributes["episoder"][0]["slut"]
+    display = hass.states.get(_entity_id(hass, "binary_sensor", "display_alarm"))
+    assert display.state == "off" and display.attributes["kod"] is None
 
     # And the same alarm again is a new episode, newest first.
     ServingPanel.header = [E017]
     await _harvest_again(hass, entry)
     alarm = hass.states.get(_entity_id(hass, "binary_sensor", "alarm"))
     assert [e["slut"] is None for e in alarm.attributes["episoder"]] == [True, False]
+    assert hass.states.get(_entity_id(hass, "binary_sensor", "display_alarm")).state == "on"
 
 
 async def test_without_a_display_page_there_is_no_alarm_sensor(hass, stubs):
@@ -314,3 +327,11 @@ async def test_without_a_display_page_there_is_no_alarm_sensor(hass, stubs):
     )
     alarm = hass.states.get(_entity_id(hass, "binary_sensor", "alarm"))
     assert "episoder" not in alarm.attributes
+    # The display's alarm is made only where the log is, and so is the sensor's
+    # registry entry.
+    assert (
+        er.async_get(hass).async_get_entity_id(
+            "binary_sensor", DOMAIN, f"{DOMAIN}_{HOST}_display_alarm"
+        )
+        is None
+    )

@@ -39,7 +39,7 @@ from dataclasses import dataclass
 import gzip
 import json
 import logging
-from typing import Any
+from typing import Any, NamedTuple
 
 import aiohttp
 
@@ -68,6 +68,20 @@ PANEL_HEIGHT = 272
 
 class CtcWebError(Exception):
     """Raised when the display's web server cannot be used."""
+
+
+class AlarmReading(NamedTuple):
+    """What one screen says about an alarm: where the panel could print one, and what it prints.
+
+    ``carries`` is whether the screen has a place the panel fills with an alarm
+    text, a header icon or a status field picked by a variable, whatever the
+    place shows now; the alarm watch needs that to tell a page that can show an
+    alarm from one that cannot. ``texts`` are the texts printed in those places
+    at the moment, the visible ones only.
+    """
+
+    carries: bool
+    texts: list[str]
 
 
 @dataclass
@@ -588,23 +602,27 @@ class CtcWebClient:
             widgets.append(widget)
         return widgets
 
-    async def async_alarm_candidates(self, screen: int, values: list[Any]) -> list[str]:
-        """The texts on a screen that would carry an alarm, read from fresh values.
+    async def async_alarm_readout(self, screen: int, values: list[Any]) -> AlarmReading:
+        """What a screen says about an alarm, read from fresh values.
 
-        Two places, in this order. The header icon at the top left, whose
-        caption the panel picks from a variable: on the history page of an
-        i550 Pro it resolved to "[E017] Givare solpaneler ut". And the status
-        field, the text the panel fills from a variable on the row captioned
-        Status. Nothing else on the screen is resolved, so a page that lists
-        past alarms cannot pass one of them off as the current one.
+        Two places, and only where the panel picks the text by a variable. The
+        header icon at the top left, whose caption the panel picks from a
+        variable: on the history page of an i550 Pro it resolved to "[E017]
+        Givare solpaneler ut". And the status field, the text the panel fills
+        from a variable on the row captioned Status. A caption the screen
+        definition fixes is a label of its icon and not a reading: VSH's panel
+        has "[E050] Stopp, låg överhettning exp.ventil" fixed on the header
+        icon of a heat pump page, and "[E195] Driver: 209" fixed on the start
+        page, where no alarm shows. Nothing else on the screen is resolved, so
+        a page that lists past alarms cannot pass one of them off as current.
 
         This moves nothing and reads nothing off the panel: the screen
         definition is fetched once a run and cached, the captions come through
         the text cache, and the values are the ones the harvest has just read.
         The globals are not fetched for this, so a text picked by a global
         variable reads as none; no screen captured so far picks anything that
-        way. What it costs is therefore one definition per screen and one
-        catalogue entry per new text, once, and nothing at all afterwards.
+        way. ``carries`` counts a place whatever its visibility now, since the
+        panel may show the icon or the field on another reading.
         """
         definition = await self.async_screen_def(screen)
         var_value = _var_resolver(values, [])
@@ -614,41 +632,55 @@ class CtcWebClient:
                 return -1
             return var_value(definition.v0[index * 2], definition.v0[index * 2 + 1])
 
-        header: list[tuple[int, int]] = []
-        dynamic: list[tuple[int, int, int]] = []
-        captions: list[tuple[int, int, int]] = []
+        # Header icons as (x, text id, visible); the texts beside a row as
+        # (x, y, text id, visible) when the panel picks them by a variable, and
+        # the captions a row may carry the same way.
+        header: list[tuple[int, int, bool]] = []
+        dynamic: list[tuple[int, int, int, bool]] = []
+        captions: list[tuple[int, int, int, bool]] = []
         for entry in definition.c1:
             if not isinstance(entry, list) or len(entry) < 9:
                 continue
             kind = entry[0]
-            if kind not in (0, 1, 2, 3) or ref(entry[8]) == 0:
+            if kind not in (0, 1, 2, 3):
                 continue
             picked = _picked_entry(definition, entry, kind, var_value)
             if picked is None or picked[0] != "text":
                 continue
+            visible = ref(entry[8]) != 0
             x, y, width = ref(entry[2]), ref(entry[3]), ref(entry[4])
+            by_variable = _selector_kind(definition, entry, kind) in (0, 1)
             if kind in (0, 1):
-                if 0 <= y < PAGE_HEADER_HEIGHT and 0 <= x < HEADER_ICON_MAX_X:
-                    header.append((x, picked[1]))
+                if by_variable and 0 <= y < PAGE_HEADER_HEIGHT and 0 <= x < HEADER_ICON_MAX_X:
+                    header.append((x, picked[1], visible))
                 continue
             if y < PAGE_HEADER_HEIGHT or width <= 0:
                 continue
-            if _selector_kind(definition, entry, kind) in (0, 1):
-                dynamic.append((x, y, picked[1]))
+            if by_variable:
+                dynamic.append((x, y, picked[1], visible))
             else:
-                captions.append((x, y, picked[1]))
+                captions.append((x, y, picked[1], visible))
 
-        candidates: list[str] = []
-        for _x, text_id in sorted(header):
-            candidates.append(await self.async_text(text_id))
-        for x, y, text_id in sorted(dynamic, key=lambda item: (item[1], item[0])):
-            for caption_x, caption_y, caption_id in captions:
+        # A variable text is the status field where the caption to its left,
+        # on the same row, reads Status. Its own visibility decides whether it
+        # is read now; the row it sits on decides whether it carries.
+        status: list[tuple[int, bool]] = []
+        for x, y, text_id, visible in sorted(dynamic, key=lambda item: (item[1], item[0])):
+            for caption_x, caption_y, caption_id, caption_visible in captions:
                 if caption_x >= x or abs(caption_y - y) > ROW_TOLERANCE:
                     continue
                 if (await self.async_text(caption_id)).strip().casefold() in STATUS_CAPTIONS:
-                    candidates.append(await self.async_text(text_id))
+                    status.append((text_id, visible and caption_visible))
                     break
-        return [text for text in candidates if text]
+
+        texts: list[str] = []
+        for _x, text_id, visible in sorted(header):
+            if visible:
+                texts.append(await self.async_text(text_id))
+        for text_id, shown in status:
+            if shown:
+                texts.append(await self.async_text(text_id))
+        return AlarmReading(bool(header or status), [text for text in texts if text])
 
     async def async_english_label(
         self,

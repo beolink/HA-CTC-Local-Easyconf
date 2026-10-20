@@ -257,6 +257,9 @@
       "defrosting": {
         "name": "Avfrostning"
       },
+      "display_alarm": {
+        "name": "Larm på displayen"
+      },
       "immersion_active": {
         "name": "Elpatron aktiv"
       },

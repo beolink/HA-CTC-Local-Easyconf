@@ -270,7 +270,7 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.patience = Patience(interval, RETRY_INTERVAL, HARVEST_PATIENCE)
         #: What each page said about an alarm, read off the same values as
         #: the rows; the alarm log on the runtime asks it after every round.
-        self.alarms = AlarmWatch()
+        self.alarms = AlarmWatch([page.page for page in pages])
         # What the last harvest before the restart left, as old as it is: the
         # sensors come up with it, judged by its age like any other reading,
         # and the first harvest is owed one interval after it rather than now.

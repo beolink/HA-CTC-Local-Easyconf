@@ -118,7 +118,7 @@ def test_the_overview_says_what_the_pump_is_doing_right_now(dashboard_views, pum
     assert [c["type"] for c in _cards(status)] == [CHIPS]
     assert _keys(pump, status, "chip") == [
         "system_status", "hp1_status", "compressor_running", "defrosting",
-        "immersion_active", "alarm", "blocked", "smartgrid_active", "hs1_status", "sg_mode",
+        "immersion_active", "display_alarm", "blocked", "smartgrid_active", "hs1_status", "sg_mode",
     ]
     # Status stays on the page whatever it reads: an unavailable pump is news.
     assert "visibility" not in status
@@ -138,7 +138,7 @@ def test_boolean_chips_are_there_only_while_on_and_in_the_colour_of_what_they_me
     }
     # The theme's colours, by name: the card turns "error" into --error-color.
     assert {key: item.get("color") for key, item in by_key.items() if "on_state" in item} == {
-        "alarm": "error",
+        "display_alarm": "error",
         "blocked": "warning",
         "smartgrid_active": "warning",
         "defrosting": "info",
@@ -146,6 +146,8 @@ def test_boolean_chips_are_there_only_while_on_and_in_the_colour_of_what_they_me
         "immersion_active": "success",
     }
     assert all(item["on_state"] == "on" for item in by_key.values() if "on_state" in item)
+    # The display's alarm reads the code and text the panel prints while it is on.
+    assert by_key["display_alarm"]["value_attribute"] == ["visat", "shown"]
     # The enum chips stay as they are and say what they read, whatever it is.
     for key in ("system_status", "hp1_status", "hs1_status", "sg_mode"):
         assert "on_state" not in by_key[key] and "color" not in by_key[key]
@@ -703,7 +705,7 @@ def test_every_key_on_the_page_is_a_unique_id_the_integration_creates(dashboard_
     # Entities with a key of their own, spelled out in the unique id: the
     # button, the sensor that accounts for the display harvest, the events and
     # the debug report's switch.
-    for name in ("button.py", "sensor.py", "event.py", "switch.py"):
+    for name in ("binary_sensor.py", "button.py", "sensor.py", "event.py", "switch.py"):
         created |= set(re.findall(r'unique_id\(runtime\.device, "([a-z_]+)"\)', _source(name)))
     # The transitions' sensors are a table in transitions.py (R27, R31), and
     # the mean run over a day is the one sensor beside it.

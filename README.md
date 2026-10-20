@@ -181,6 +181,17 @@ so far, the history page of an i550 Pro, and is to be confirmed the next time a
 unit alarms; the status field is read only on a row captioned *Status*, so a page
 of past alarms cannot pass one of them off as current.
 
+The binary sensor *Display alarm* (*Larm på displayen*) is on while the panel shows
+an alarm, meaning a harvest has seen it there within the last harvest interval plus
+five minutes (fifteen minutes where that is longer), or while the heat pump's own
+alarm status is on. Its attributes give the code, the text, when it began, and
+whether it is still confirmed with the time of the last sighting. The red alarm chip
+on the overview follows it and names the code and the text. An episode closes only
+when a harvest reads every page that can show an alarm and sees none; a harvest that
+reads fewer pages leaves it open and unconfirmed, so an old alarm is not shown as live.
+A label that a screen fixes on an icon, which the panel never picks by a variable,
+is not an alarm.
+
 ## The catch with the display, and what the integration does about it
 
 Only the page the panel is currently showing is kept up to date. Every other
@@ -896,6 +907,9 @@ managers that read them should move to the English names now.
 | `styrning aktiv`, `ja` or `nej` | `control_active`, `true` or `false` | the controls |
 | `pumpens värde` | `pump_value` | the controls with a stored setting beside them, also while an override is in force |
 | `episoder`, each with `kod`, `text`, `start`, `slut`, `utetemperatur` | `episodes`, each with `code`, `text`, `start`, `end`, `outdoor_temperature` | the binary sensor *Alarm* |
+| `visat` | `shown` | the binary sensor *Display alarm* |
+| `senast bekräftad` | `last_confirmed` | the binary sensor *Display alarm* |
+| `bekräftad` | `confirmed` | the binary sensor *Display alarm* |
 | `styrningar`, each with `namn`, `register`, `värde`, `satt` | `overrides`, each with `name`, `register`, `value`, `set_at` | the sensor *Active overrides* |
 
 Values that are text, such as a reason, what a figure rests on, where the
