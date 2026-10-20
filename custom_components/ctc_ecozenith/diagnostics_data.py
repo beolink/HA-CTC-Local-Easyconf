@@ -46,6 +46,7 @@ from .const import (
     CONF_SLOW_PAGES,
 )
 from .cop import SHARE_SPANS, cop_for_report, current_totals, immersion_now, share_for
+from .cop_estimate import estimate_section
 from .stats_extra import serial_made, serial_product
 
 #: What Home Assistant puts in place of a redacted value, used for the wash too.
@@ -340,6 +341,9 @@ def cop_section(runtime: Any) -> dict[str, Any]:
         # R28: the immersion heater's counter as taken with the display's
         # counters, which the samples and the share of auxiliary heat use.
         "immersion_kwh": immersion_now(runtime),
+        # The estimate from the display's two powers (cop_estimate.py): its sums
+        # and their hours, and whether the two rows were found.
+        "estimate": estimate_section(runtime),
     }
     tracker = getattr(runtime, "cop", None)
     if tracker is None:

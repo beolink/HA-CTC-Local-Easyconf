@@ -53,7 +53,9 @@ from .cop import (
     stale_rows,
     totals_source,
 )
+from .cop_estimate import ESTIMATE_SPANS, METHOD, estimate_for
 from .entity import async_switch_on_new_defaults
+from .explanations import ESTIMATE_REASONS
 from .keys import prefix_of, previous_keys, unique_id
 from .overrides import held
 from .rows import due_rows, split_rows, vanished_display_keys
@@ -184,6 +186,11 @@ async def async_setup_entry(
         # The immersion heater's share of the electricity over the same spans
         # but the first year (R28), from the same samples.
         entities.extend(CtcShareSensor(runtime, span) for span in SHARE_SPANS)
+    # The estimate from the display's two powers (cop_estimate.py), beside the
+    # counters' figures and never in place of them. Wherever the display is
+    # harvested: the reason it gives is what says which power is missing.
+    if runtime.web is not None and getattr(runtime, "heat_estimate", None) is not None:
+        entities.extend(CtcCopEstimateSensor(runtime, span) for span in ESTIMATE_SPANS)
 
     # The sums the integration makes of the two power rows, where the machine's
     # own counters never move (integrate.py). Shown whether or not they are the
@@ -840,6 +847,59 @@ class CtcCopSensor(CoordinatorEntity, SensorEntity):
                 self.coordinator, counter_rows(self._runtime)
             )
         return True
+
+
+class CtcCopEstimateSensor(CoordinatorEntity, SensorEntity):
+    """The coefficient of performance estimated from the display's two powers (cop_estimate.py).
+
+    Best effort, and marked as one: the figure is a quotient of two integrated
+    powers, not of the heat pump's counters, and it has no figure at all where
+    the heat is zero all the time or where the quotient is outside the bounds,
+    which the attribute reason says. The single reading, span "now", integrates
+    nothing and is noisy. Nothing here is written to the heat pump.
+    """
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:gauge"
+    _attr_suggested_display_precision = 2
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    #: The Swedish name of each span, which translations/sv.json carries word for
+    #: word under the translation key cop_estimate_<span>.
+    NAMES = {
+        "day": "Uppskattad dygnsvärmefaktor",
+        "lifetime": "Uppskattad värmefaktor, hela livslängden",
+        "now": "Uppskattad värmefaktor, just nu",
+    }
+
+    def __init__(self, runtime, span: str) -> None:
+        super().__init__(runtime.web)
+        self._runtime = runtime
+        self._span = span
+        self._attr_unique_id = unique_id(runtime.device, f"cop_estimate_{span}")
+        self._attr_translation_key = f"cop_estimate_{span}"
+        self._attr_device_info = runtime.device
+
+    @property
+    def native_value(self) -> float | None:
+        return estimate_for(self._runtime, self._span).value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        estimate = estimate_for(self._runtime, self._span)
+        attributes: dict[str, object] = {
+            "method": METHOD,
+            "heat_hours": estimate.heat_hours,
+            "electric_hours": estimate.electric_hours,
+        }
+        if self._span == "now" and estimate.read_at is not None:
+            attributes["read_at"] = estimate.read_at.isoformat(timespec="seconds")
+        if estimate.reason is not None:
+            # The reason in both languages: skäl in Swedish, reason in English.
+            text = ESTIMATE_REASONS[estimate.reason]
+            attributes["skäl"] = str(text)
+            attributes["reason"] = text.en
+        return attributes
 
 
 class CtcShareSensor(CoordinatorEntity, SensorEntity):

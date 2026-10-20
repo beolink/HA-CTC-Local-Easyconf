@@ -401,10 +401,11 @@ def test_the_set_up_seeds_the_coordinator_and_remembers_after_each_harvest():
 
 def test_removing_the_entry_takes_all_three_stores_with_it():
     remove = _source("__init__.py").split("async def async_remove_entry")[1]
-    for suffix in ("_seen", "_display", "_cop"):
+    for suffix in ("_seen", "_display", "_cop", "_cop_estimate"):
         assert f'_{{entry.entry_id}}{suffix}"' in remove, f"storen {suffix} tas inte bort"
-    # seen, display, cop and alarms (L3 and R30 added the fourth)
-    assert remove.count(".async_remove()") == 4
+    # seen, display, cop, the estimate's sums and alarms (L3 and R30 added the
+    # fourth, the estimate the fifth)
+    assert remove.count(".async_remove()") == 5
 
 
 def test_the_identity_is_read_in_the_background_and_swept_once_per_run():

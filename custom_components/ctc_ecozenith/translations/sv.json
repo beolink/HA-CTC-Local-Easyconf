@@ -359,6 +359,15 @@
       "cop_day": {
         "name": "Dygnsvärmefaktor"
       },
+      "cop_estimate_day": {
+        "name": "Uppskattad dygnsvärmefaktor"
+      },
+      "cop_estimate_lifetime": {
+        "name": "Uppskattad värmefaktor, hela livslängden"
+      },
+      "cop_estimate_now": {
+        "name": "Uppskattad värmefaktor, just nu"
+      },
       "cop_first_year": {
         "name": "Värmefaktor, första året"
       },

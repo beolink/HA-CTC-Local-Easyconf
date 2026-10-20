@@ -98,6 +98,7 @@ from .cop import (
     power_now,
     powered_on_hours,
 )
+from .cop_estimate import find_inverter_power
 from .debug_report import (
     async_setup_debug_report,
     async_stop_debug_report,
@@ -111,7 +112,11 @@ from .identity import (
     async_read_identity_via_panel,
     only_identity_differs,
 )
-from .integrate import STORAGE_VERSION as INTEGRATE_STORAGE_VERSION, PowerIntegrator
+from .integrate import (
+    STORAGE_VERSION as INTEGRATE_STORAGE_VERSION,
+    EstimateIntegrator,
+    PowerIntegrator,
+)
 from .keys import (
     device_key,
     keep_hidden_rows,
@@ -1168,6 +1173,11 @@ class CtcRuntime:
     power_out: Any | None = None
     power_in: Any | None = None
     integrator: PowerIntegrator | None = None
+    #: The coefficient of performance estimated from the display's powers: the
+    #: sums of today and of the lifetime, and the inverter's power row the
+    #: electricity comes from. See cop_estimate.py. Wherever the display is harvested.
+    heat_estimate: EstimateIntegrator | None = None
+    inverter_power: Any | None = None
     #: Candidate rows for the unit's powered-on hours; the largest is used.
     operating_hours: Any | None = None
     #: What this installation has ever given a value other than zero.
@@ -1445,6 +1455,33 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
             _integrate()
             entry.async_on_unload(web.async_add_listener(_integrate))
             runtime.integrator = integrator
+        # The coefficient of performance estimated from the display's two powers
+        # (cop_estimate.py): delivered heat, and the inverter's electricity, which
+        # is read in the same harvest. Its sums have a store of their own, and the
+        # sensors that show it say which of the two rows is missing when one is.
+        runtime.inverter_power = find_inverter_power(pages)
+        estimate = EstimateIntegrator(
+            Store(hass, INTEGRATE_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_cop_estimate"),
+            zone=dt_util.get_default_time_zone(),
+        )
+        await estimate.async_load()
+        runtime.heat_estimate = estimate
+        if runtime.power_out is not None and runtime.inverter_power is not None:
+            heat_key = runtime.power_out.key
+            inverter_key = runtime.inverter_power.key
+
+            def _estimate() -> None:
+                # The two rows from one harvest or not at all: each row's own
+                # read moment has to be the same, or they are two readings.
+                data = web.data or {}
+                when = web.last_read(heat_key)
+                if when is None or web.last_read(inverter_key) != when:
+                    return
+                if estimate.note(when, data.get(heat_key), data.get(inverter_key)):
+                    estimate.save_soon()
+
+            _estimate()
+            entry.async_on_unload(web.async_add_listener(_estimate))
         runtime.starts_per_day = find_starts_per_day(pages)
         if runtime.energy_out is not None and runtime.energy_in is None:
             # The older display software, as on an i360, counts delivered heat
@@ -1712,4 +1749,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> None
         hass, HARVEST_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_display"
     ).async_remove()
     await Store(hass, 1, f"{DOMAIN}_{entry.entry_id}_cop").async_remove()
+    await Store(
+        hass, INTEGRATE_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_cop_estimate"
+    ).async_remove()
     await Store(hass, ALARM_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_alarms").async_remove()

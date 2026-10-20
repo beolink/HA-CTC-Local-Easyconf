@@ -47,6 +47,19 @@ from .cop import (
     WINDOWS,
     YEAR_MAX_DAYS,
 )
+from .cop_estimate import (
+    ESTIMATE_MAX,
+    ESTIMATE_MIN,
+    FIRST_READ,
+    IMPLAUSIBLE,
+    NO_DAY_READINGS,
+    NO_ELECTRICITY,
+    NO_HEAT,
+    NO_HEAT_ROW,
+    NO_INVERTER_ROW,
+    SILENT,
+)
+from .integrate import MAX_GAP
 
 #: The languages the texts are written in, Swedish first: it is the reserve.
 SWEDISH = "sv"
@@ -171,6 +184,40 @@ _SHARE_SAMPLED = Text(
     "andelen kommer när en sådan avläsning är gammal nog.",
     "The immersion heater's counter is kept in the integration's own readings since the share "
     "was added, so the share appears once such a reading is old enough.",
+)
+
+#: The estimate from the display's two powers (cop_estimate.py), in the words its
+#: three sensors share: what it is, what it rests on, how far it is from the
+#: counters, and when it has no figure. The bounds and the gap are read off the
+#: code, as the floors are above.
+_ESTIMATE_BOUNDS = f"{ESTIMATE_MIN:.0f} till {ESTIMATE_MAX:.0f}"
+_ESTIMATE_BOUNDS_EN = f"{ESTIMATE_MIN:.0f} to {ESTIMATE_MAX:.0f}"
+_ESTIMATE_GAP = f"{int(MAX_GAP.total_seconds() // 3600)} timmar"
+_ESTIMATE_GAP_EN = f"{int(MAX_GAP.total_seconds() // 3600)} hours"
+_ESTIMATE_WHAT = Text(
+    "Uppskattning, ingen räknare: avgiven värme delat med inverterns el, där båda är integrerade "
+    "ur displayens två effekter, Avgiven värme (kW) och Inverter Motoreffekt (kW), som läses i "
+    "samma skörd. Elen är inverterns effekt till kompressorn, inte pumpens hela tillförda el, "
+    "så talet ligger högre än räknarna: på installationen VSH ungefär 9 procent, varav ungefär "
+    "4 procent beror på displayens värme och ungefär 5 procent på att inverterns el är lägre än "
+    "den tillförda elen.",
+    "An estimate, not a counter: delivered heat divided by the inverter's electricity, where both "
+    "are integrated from the display's two powers, Avgiven värme (kW) and Inverter Motoreffekt "
+    "(kW), read in the same harvest. The electricity is the inverter's power to the compressor, "
+    "not the heat pump's whole supplied electricity, so the figure runs above the counters: on "
+    "the installation VSH about 9 percent, of which about 4 percent comes from the display's "
+    "heat and about 5 percent from the inverter's electricity being lower than the supplied "
+    "electricity.",
+)
+_ESTIMATE_EDGES = Text(
+    "Visas inte där värmen är noll hela tiden, eller när talet ligger utanför "
+    f"{_ESTIMATE_BOUNDS}. Pumpar som inte redovisar avgiven värme får inget tal, och attributet "
+    "skäl säger då varför. Attributen method, heat_hours och electric_hours visar hur talet "
+    "är framtaget och hur många timmar mätningar det vilar på.",
+    "Not shown where the heat has been zero all the time, or where the figure lies outside "
+    f"{_ESTIMATE_BOUNDS_EN}. Heat pumps that do not report any heat output get no figure, and "
+    "the attribute reason says why. The attributes method, heat_hours and electric_hours show how "
+    "the figure is made and how many hours of measurements it rests on.",
 )
 
 #: When the day's starts and defrosts begin again from nought. The watch that
@@ -864,6 +911,72 @@ DERIVED: dict[str, Text] = {
         f"{_SHARE_WHAT.en} The whole lifetime: the counters as they stand since commissioning. "
         f"Shown once at least {_COP_FLOOR_LIFETIME} kWh has been used in all. {_SHARE_EDGES.en}",
     ),
+    # The estimate from the display's two powers (cop_estimate.py), best effort
+    # and said so on every sensor. Beside the counters' figures, never in place of them.
+    "cop_estimate_day": Text(
+        "Uppskattad värmefaktor sedan midnatt. "
+        f"{_ESTIMATE_WHAT} Talet gäller från midnatt och till nu. {_ESTIMATE_EDGES}",
+        "Estimated coefficient of performance since midnight. "
+        f"{_ESTIMATE_WHAT.en} The figure covers the time since midnight up to now. "
+        f"{_ESTIMATE_EDGES.en}",
+    ),
+    "cop_estimate_lifetime": Text(
+        "Uppskattad värmefaktor över hela livslängden, sedan integrationen började spara "
+        f"effekterna. {_ESTIMATE_WHAT} Mellan två skördar räknas aldrig längre än "
+        f"{_ESTIMATE_GAP}, så en lucka i mätningarna fylls inte. {_ESTIMATE_EDGES}",
+        "Estimated coefficient of performance over the whole lifetime, since the integration began "
+        f"to keep the powers. {_ESTIMATE_WHAT.en} Two harvests are never counted across more than "
+        f"{_ESTIMATE_GAP_EN} apart, so a gap in the measurements is not filled. {_ESTIMATE_EDGES.en}",
+    ),
+    "cop_estimate_now": Text(
+        "Uppskattad värmefaktor just nu, ur de två effekterna i den senaste skörden. "
+        "Det är ett enda ögonblick och ingen integrerad tid, så talet är brusigt och säger "
+        "lite om ett dygn. Attributet read_at säger när skörden lästes, och är den gammal är "
+        f"talet också gammalt. {_ESTIMATE_WHAT} {_ESTIMATE_EDGES}",
+        "Estimated coefficient of performance now, from the two powers of the latest harvest. "
+        "It is a single moment and no integrated time, so the figure is noisy and says little "
+        "about a day. The attribute read_at says when the harvest was read, and if that is old "
+        f"the figure is old too. {_ESTIMATE_WHAT.en} {_ESTIMATE_EDGES.en}",
+    ),
+}
+
+#: The reasons an estimate gives where it has no figure, in the words the attribute
+#: skäl carries, with the English the attribute reason carries beside them. Kept out
+#: of TABLES: those hold the ⓘ texts as full sentences, and these are the phrases an
+#: attribute carries, so "orimligt värde" stays exactly that.
+ESTIMATE_REASONS: dict[str, Text] = {
+    NO_HEAT_ROW: Text(
+        "raden Avgiven värme (kW) finns inte på de sidor som hämtas",
+        "the row Avgiven värme (kW) is not on the pages that are read",
+    ),
+    NO_INVERTER_ROW: Text(
+        "raden Inverter Motoreffekt (kW) finns inte på de sidor som hämtas",
+        "the row Inverter Motoreffekt (kW) is not on the pages that are read",
+    ),
+    SILENT: Text(
+        "värmepumpens sida ger inga värden, vilket en avstängd värmepump inte gör",
+        "the heat pump's page gives no values, as a heat pump that is switched off does not",
+    ),
+    FIRST_READ: Text(
+        "väntar på en andra läsning, summeringen börjar vid nästa skörd",
+        "waiting for a second reading, the sums start at the next harvest",
+    ),
+    NO_DAY_READINGS: Text(
+        "inga mätningar sedan midnatt ännu",
+        "no readings since midnight yet",
+    ),
+    NO_HEAT: Text(
+        "pumpen anger ingen avgiven värme",
+        "the heat pump reports no heat output",
+    ),
+    NO_ELECTRICITY: Text(
+        "ingen tillförd el i underlaget",
+        "no electricity in the basis",
+    ),
+    IMPLAUSIBLE: Text(
+        "orimligt värde",
+        "implausible value",
+    ),
 }
 
 #: The integration's own account of how it reads the display.
@@ -1412,6 +1525,25 @@ _SOURCES: dict[str, Text] = {
         "The header icon and the status field on the display pages that are harvested",
     ),
     "made": Text("Räknas ur serienumret", "Worked out from the serial number"),
+    # Before the cop_ fallback below, which would name the energy counters.
+    "cop_estimate_day": Text(
+        "Räknas fram ur displayens rader Avgiven värme (kW) och Inverter Motoreffekt (kW), "
+        "integrerade sedan midnatt",
+        "Worked out from the display's rows Avgiven värme (kW) and Inverter Motoreffekt (kW), "
+        "integrated since midnight",
+    ),
+    "cop_estimate_lifetime": Text(
+        "Räknas fram ur displayens rader Avgiven värme (kW) och Inverter Motoreffekt (kW), "
+        "integrerade över hela tiden",
+        "Worked out from the display's rows Avgiven värme (kW) and Inverter Motoreffekt (kW), "
+        "integrated over the whole time",
+    ),
+    "cop_estimate_now": Text(
+        "Räknas fram ur displayens rader Avgiven värme (kW) och Inverter Motoreffekt (kW), "
+        "i den senaste skörden",
+        "Worked out from the display's rows Avgiven värme (kW) and Inverter Motoreffekt (kW), "
+        "in the latest harvest",
+    ),
 }
 _COP_SOURCE = Text("Räknas ur energiräknarna", "Worked out from the energy counters")
 _SHARE_SOURCE = Text(

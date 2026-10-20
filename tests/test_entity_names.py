@@ -205,6 +205,7 @@ def _keys_in_code(const, transitions) -> dict[str, set[str]]:
             | {row.elts[0].value for row in identity.elts}
             | {f"cop_{span}" for span in ast.literal_eval(spans)}
             | {f"aux_share_{span}" for span in load("cop").SHARE_SPANS}
+            | {f"cop_estimate_{span}" for span in load("cop_estimate").ESTIMATE_SPANS}
             | {
                 f"integrated_{side}"
                 for side in ast.literal_eval(_assigned(sensor, "INTEGRATED_SIDES"))
@@ -306,7 +307,11 @@ def test_the_swedish_names_the_tables_keep_are_sv_json_s(const):
     for row in _assigned(sensor, "IDENTITY_ROWS").elts:
         key, name = row.elts[0].value, row.elts[1].value
         assert swedish["sensor"][key] == name, key
-    for cls, prefix in (("CtcCopSensor", "cop_"), ("CtcShareSensor", "aux_share_")):
+    for cls, prefix in (
+        ("CtcCopSensor", "cop_"),
+        ("CtcCopEstimateSensor", "cop_estimate_"),
+        ("CtcShareSensor", "aux_share_"),
+    ):
         body = next(
             node for node in sensor.body if isinstance(node, ast.ClassDef) and node.name == cls
         )

@@ -359,6 +359,15 @@
       "cop_day": {
         "name": "Daily COP"
       },
+      "cop_estimate_day": {
+        "name": "Estimated daily COP"
+      },
+      "cop_estimate_lifetime": {
+        "name": "Estimated COP, whole lifetime"
+      },
+      "cop_estimate_now": {
+        "name": "Estimated COP, now"
+      },
       "cop_first_year": {
         "name": "COP, first year"
       },
