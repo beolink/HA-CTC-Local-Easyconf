@@ -478,7 +478,12 @@ def test_the_estimate_texts_say_what_they_rest_on_and_what_they_are_not(explanat
     assert "Avgiven värme (kW)" in english and "Inverter Motoreffekt (kW)" in english
     assert "uppskattning" in swedish.lower() and "estimate" in english.lower()
     assert "räknare" in swedish and "counter" in english
-    assert "9 procent" in swedish and "9 percent" in english
+    # Rough, but said to rest on something measured. No single installation's
+    # figure goes into the text: one house's number would be wrong in the next.
+    assert "grov" in swedish and "rough" in english
+    assert "vetenskapligt grundad" in swedish and "scientifically grounded" in english
+    assert "procent" not in swedish and "percent" not in english
+    assert "VSH" not in swedish and "VSH" not in english
     assert "skäl" in swedish and "reason" in english
     assert "1 till 8" in swedish and "1 to 8" in english
 

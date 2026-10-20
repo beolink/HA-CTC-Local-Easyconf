@@ -197,17 +197,15 @@ _ESTIMATE_GAP_EN = f"{int(MAX_GAP.total_seconds() // 3600)} hours"
 _ESTIMATE_WHAT = Text(
     "Uppskattning, ingen räknare: avgiven värme delat med inverterns el, där båda är integrerade "
     "ur displayens två effekter, Avgiven värme (kW) och Inverter Motoreffekt (kW), som läses i "
-    "samma skörd. Elen är inverterns effekt till kompressorn, inte pumpens hela tillförda el, "
-    "så talet ligger högre än räknarna: på installationen VSH ungefär 9 procent, varav ungefär "
-    "4 procent beror på displayens värme och ungefär 5 procent på att inverterns el är lägre än "
-    "den tillförda elen.",
+    "samma skörd. Uppskattningen är grov men vetenskapligt grundad: den bygger på att integrera "
+    "två uppmätta effekter över tid. Elen är inverterns effekt till kompressorn, inte pumpens "
+    "hela tillförda el, så talet kan ligga något högre än räknarna.",
     "An estimate, not a counter: delivered heat divided by the inverter's electricity, where both "
     "are integrated from the display's two powers, Avgiven värme (kW) and Inverter Motoreffekt "
-    "(kW), read in the same harvest. The electricity is the inverter's power to the compressor, "
-    "not the heat pump's whole supplied electricity, so the figure runs above the counters: on "
-    "the installation VSH about 9 percent, of which about 4 percent comes from the display's "
-    "heat and about 5 percent from the inverter's electricity being lower than the supplied "
-    "electricity.",
+    "(kW), read in the same harvest. The estimate is rough but scientifically grounded: it rests "
+    "on integrating two measured powers over time. The electricity is the inverter's power to the "
+    "compressor, not the heat pump's whole supplied electricity, so the figure can run somewhat "
+    "above the counters.",
 )
 _ESTIMATE_EDGES = Text(
     "Visas inte där värmen är noll hela tiden, eller när talet ligger utanför "
