@@ -71,10 +71,10 @@ def harvest(web_api, const):
         return [123]
 
     async def no_alarm(screen, values):
-        return []
+        return web_api.AlarmReading(False, [])
 
     client.async_vars = vars_
-    client.async_alarm_candidates = no_alarm
+    client.async_alarm_readout = no_alarm
     page = const.SlowPage(
         page=PAGE,
         title="Värmesystem",

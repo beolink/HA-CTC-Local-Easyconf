@@ -35,14 +35,18 @@ ITEMS = [
 ]
 
 
-def _chips(states: dict, then: dict | None = None, words: dict | None = None) -> list[dict]:
+def _chips(
+    states: dict, then: dict | None = None, words: dict | None = None,
+    items: list[dict] | None = None,
+) -> list[dict]:
     """Mount the chips over `states`, optionally send `then`, and read the chips.
 
     Each chip comes back as its name, whether it is hidden, what it shows and
     the colour it was given, in drawing order. `words` is the page's table of
-    state words (dashboard_views.state_words), sent under `states` when given.
+    state words (dashboard_views.state_words), sent under `states` when given,
+    and `items` replaces the chips the module's ITEMS names.
     """
-    config = {"items": ITEMS}
+    config = {"items": items if items is not None else ITEMS}
     if words is not None:
         config["states"] = words
     program = (
@@ -91,6 +95,42 @@ def test_a_boolean_chip_comes_and_goes_with_its_state_and_keeps_its_colour():
         ("Kompressor i drift", True, "success"),
         ("Larm", False, "error"),
     ]
+
+
+DISPLAY = "binary_sensor.ctc_display_alarm"
+#: The display's alarm as the overview gives it: red while on, and it reads the
+#: code and text the panel prints (dashboard_views._CHIP_VALUE_ATTRIBUTES).
+DISPLAY_ITEM = {
+    "entity": DISPLAY, "name": "Larm på displayen", "on_state": "on", "color": "error",
+    "value_attribute": ["visat", "shown"],
+}
+SHOWN = "[E050] Stopp, låg överhettning exp.ventil"
+
+
+def test_the_display_alarm_chip_names_the_code_and_text_and_is_red_while_on():
+    chips = _chips({DISPLAY: _state("on", visat=SHOWN, shown=SHOWN)}, items=[DISPLAY_ITEM])
+    assert chips == [{"name": "Larm på displayen", "hidden": False, "value": SHOWN,
+                      "color": "error"}]
+
+
+def test_the_display_alarm_chip_takes_the_english_twin_when_the_swedish_is_missing():
+    chips = _chips({DISPLAY: _state("on", shown=SHOWN)}, items=[DISPLAY_ITEM])
+    assert chips[0]["value"] == SHOWN and chips[0]["hidden"] is False
+
+
+def test_the_display_alarm_chip_is_its_own_word_while_on_without_a_text():
+    # The heat pump's own alarm is on, and the display shows nothing: the chip
+    # still reads on, in its own word rather than an empty value.
+    chips = _chips({DISPLAY: _state("on")}, items=[DISPLAY_ITEM])
+    assert chips == [{"name": "Larm på displayen", "hidden": False, "value": "on",
+                      "color": "error"}]
+
+
+def test_an_unconfirmed_display_alarm_is_not_on_the_line_and_comes_back_with_its_text():
+    off = {DISPLAY: _state("off", visat=SHOWN)}
+    assert _chips(off, items=[DISPLAY_ITEM])[0]["hidden"] is True, "obekräftat: ingen röd chip"
+    later = _chips(off, then={DISPLAY: _state("on", visat=SHOWN)}, items=[DISPLAY_ITEM])
+    assert (later[0]["hidden"], later[0]["value"], later[0]["color"]) == (False, SHOWN, "error")
 
 
 def test_an_unavailable_or_unknown_boolean_is_not_on_and_an_enum_chip_stays():

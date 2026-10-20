@@ -257,6 +257,9 @@
       "defrosting": {
         "name": "Defrost"
       },
+      "display_alarm": {
+        "name": "Display alarm"
+      },
       "immersion_active": {
         "name": "Immersion heater active"
       },

@@ -6,9 +6,15 @@ itself out of its own catalogue, "[E017] Givare solpaneler ut", and on the
 pages captured so far it draws that text in the header icon at the top left;
 the status field of a heat pump page is the other text the panel fills from a
 variable. This module reads those two places off the values the harvest has
-already fetched, through the client (web_api.async_alarm_candidates), keeps
-the alarm the panel showed last, and remembers the last ten episodes: when
-each began and ended, its code, and the outdoor temperature when it began.
+already fetched, through the client (web_api.async_alarm_readout), keeps the
+alarm the panel showed last, and remembers the last ten episodes: when each
+began and ended, its code, and the outdoor temperature when it began.
+
+An episode is opened by a round that shows an alarm and closed by a round that
+reads every page that can print one and shows none. A round that reads fewer
+pages than that says nothing about the alarm, so the log keeps the episode as
+it is; and the log keeps when a round last saw the open episode on the panel,
+so that an episode nothing has seen for a while is not shown as a live alarm.
 
 Nothing is polled for this, nothing is navigated for it, the catalogue is
 never enumerated, and none of it goes to the statistics backend. Free of Home
@@ -22,10 +28,10 @@ the next time a unit alarms.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import re
-from typing import Any
+from typing import Any, NamedTuple
 
 from .attribute_names import episode_in_english
 from .const import ALARM_EPISODES, ALARM_TEXT_PREFIX, SlowPage
@@ -39,8 +45,21 @@ STORAGE_VERSION = 1
 #: alarm is the kind of thing worth having on disk before the next restart.
 SAVE_DELAY_SECONDS = 5
 
+#: The confirmation an open episode is held to: a round has to have seen it on
+#: the panel this long ago or less. Fifteen minutes, or one harvest interval
+#: and a margin where that is longer, since the harvest is what sees it; the
+#: default harvest is every thirty minutes, which fifteen minutes alone would
+#: switch the alarm off between two harvests.
+CONFIRM_MINUTES = 15
+CONFIRM_MARGIN = timedelta(minutes=5)
+
 #: "[E017] Givare solpaneler ut": the code in brackets, the text after it.
 _ALARM = re.compile(r"^\[(E[^\]]*)\]\s*(.*)$")
+
+
+def confirm_window(interval: float) -> timedelta:
+    """How long a sighting counts for a harvest every ``interval`` seconds."""
+    return max(timedelta(minutes=CONFIRM_MINUTES), timedelta(seconds=interval) + CONFIRM_MARGIN)
 
 
 def parse_alarm(text: str | None) -> tuple[str, str] | None:
@@ -65,6 +84,26 @@ def alarm_text(candidates: Iterable[str | None]) -> str | None:
     return None
 
 
+class AlarmRound(NamedTuple):
+    """What the harvest's last round said about the alarm.
+
+    ``read`` is whether any page was read in it. ``shown`` is the alarm the
+    panel printed in those pages, if any. ``complete`` is whether every page
+    that can print an alarm was read, which is what lets a round that shows
+    none close an episode.
+    """
+
+    read: bool
+    shown: str | None
+    complete: bool
+
+
+class _Note(NamedTuple):
+    text: str | None
+    at: datetime
+    carries: bool
+
+
 class AlarmWatch:
     """What each harvested page said about an alarm, and which of it is new.
 
@@ -75,8 +114,13 @@ class AlarmWatch:
     showing it is an alarm, no page read this round showing it is none.
     """
 
-    def __init__(self) -> None:
-        self._notes: dict[int, tuple[str | None, datetime]] = {}
+    def __init__(self, pages: Iterable[int] = ()) -> None:
+        #: The pages the harvest reads. One the watch has never been able to
+        #: judge counts as one that can print an alarm, so that a round which
+        #: does not reach it cannot close an episode; a page judged to carry
+        #: nothing stops counting once it has been judged.
+        self._pages = frozenset(pages)
+        self._notes: dict[int, _Note] = {}
         self._handed: dict[int, datetime] = {}
 
     async def async_note(
@@ -86,7 +130,7 @@ class AlarmWatch:
         values_by_screen: Mapping[int, list[Any]],
         read_at: datetime,
     ) -> str | None:
-        """Read a page's alarm candidates off the values just harvested.
+        """Read a page's alarm texts off the values just harvested.
 
         Only the screens that carry one of the page's own rows are looked at:
         the chrome screens a page shares with every other hold the clock and
@@ -101,39 +145,43 @@ class AlarmWatch:
         ]
         if not screens:
             return None
-        read = getattr(client, "async_alarm_candidates", None)
+        read = getattr(client, "async_alarm_readout", None)
         if read is None:
             # A client that cannot read texts, a stand-in among them: no
             # information, not "no alarm".
             return None
+        carries = False
         candidates: list[str] = []
         for screen in screens:
             try:
-                candidates.extend(await read(screen, values_by_screen[screen]))
+                reading = await read(screen, values_by_screen[screen])
             except CtcWebError as err:
                 _LOGGER.debug("Alarm texts of screen %s not read: %s", screen, err)
                 return None
+            carries = carries or reading.carries
+            candidates.extend(reading.texts)
         text = alarm_text(candidates)
-        self._notes[page.page] = (text, read_at)
+        self._notes[page.page] = _Note(text, read_at, carries)
         return text
 
-    def fresh(self) -> tuple[bool, str | None]:
-        """Whether any page was read since the last call, and the alarm shown.
-
-        The alarm is the first text among the pages read since, in page order;
-        a page that was not reached this round does not count, in either
-        direction.
-        """
+    def fresh(self) -> AlarmRound:
+        """What was read since the last call, and whether every alarm page was read."""
         new = {
-            page: text
-            for page, (text, at) in self._notes.items()
-            if self._handed.get(page) != at
+            page: note
+            for page, note in self._notes.items()
+            if self._handed.get(page) != note.at
         }
-        for page in new:
-            self._handed[page] = self._notes[page][1]
+        for page, note in new.items():
+            self._handed[page] = note.at
         if not new:
-            return False, None
-        return True, next((text for text in new.values() if text), None)
+            return AlarmRound(False, None, False)
+        expected = {
+            page
+            for page in self._pages | set(self._notes)
+            if page not in self._notes or self._notes[page].carries
+        }
+        shown = next((note.text for note in new.values() if note.text), None)
+        return AlarmRound(True, shown, expected <= set(new))
 
 
 def _stamp(when: datetime) -> str:
@@ -143,16 +191,25 @@ def _stamp(when: datetime) -> str:
 class AlarmLog:
     """The alarm the panel shows, and the last ten episodes of it.
 
-    An episode begins when the panel shows an alarm text and no episode with
-    that code is open, and ends when a round of the harvest shows none, or
-    another code. Episodes are kept newest first, each with the code, the text,
-    the panel's own print of it, when it began and ended, and the outdoor
-    temperature when it began.
+    An episode begins when a round shows an alarm text and no episode with
+    that code is open. It ends when a round shows another code, or when a
+    round that read every page that can print an alarm shows none. Episodes
+    are kept newest first, each with the code, the text, the panel's own print
+    of it, when it began and ended, and the outdoor temperature when it began.
+
+    ``last_confirmed`` is when a round last saw the open episode on the panel.
+    It is kept in memory only: after a restart an open episode is not confirmed
+    until a round sees it again, so a stored alarm is never shown as live on
+    the strength of an old sighting.
     """
 
-    def __init__(self, store: Any) -> None:
+    def __init__(
+        self, store: Any, confirm_within: timedelta = timedelta(minutes=CONFIRM_MINUTES)
+    ) -> None:
         self._store = store
+        self._within = confirm_within
         self.episodes: list[dict[str, Any]] = []
+        self.last_confirmed: datetime | None = None
 
     async def async_load(self) -> None:
         stored = await self._store.async_load()
@@ -191,22 +248,40 @@ class AlarmLog:
         latest = self.latest
         return latest is not None and latest["end"] is None
 
-    def note(self, shown: str | None, when: datetime, outdoor: float | None) -> bool:
-        """Take in what a round of the harvest showed. Returns whether anything changed.
+    def confirmed(self, now: datetime) -> bool:
+        """Whether the open episode was seen on the panel within the confirmation window."""
+        return (
+            self.active
+            and self.last_confirmed is not None
+            and now - self.last_confirmed < self._within
+        )
+
+    def confirmed_until(self) -> datetime | None:
+        """When the open episode's confirmation runs out, or None when nothing is confirmed."""
+        if not self.active or self.last_confirmed is None:
+            return None
+        return self.last_confirmed + self._within
+
+    def note(
+        self, shown: str | None, when: datetime, outdoor: float | None, *, complete: bool = False
+    ) -> bool:
+        """Take in what a round of the harvest showed. Returns whether the stored log changed.
 
         ``shown`` is the alarm text as the panel printed it, or None when the
-        round showed no alarm. A round that read nothing is not to be noted at
-        all; that is the watch's business.
+        round showed none. ``complete`` says the round read every page that
+        can print an alarm; only such a round closes an episode on a reading
+        of none, and it is off unless the caller says otherwise. A round that
+        read nothing is not to be noted at all; that is the watch's business.
         """
         parsed = parse_alarm(shown)
         open_episode = self.latest if self.active else None
-        changed = False
-        if open_episode is not None and (parsed is None or parsed[0] != open_episode["code"]):
-            open_episode["end"] = _stamp(when)
-            changed = True
-            open_episode = None
-        if parsed is not None and open_episode is None:
+        if parsed is not None:
             code, text = parsed
+            if open_episode is not None and open_episode["code"] == code:
+                self.last_confirmed = when
+                return False
+            if open_episode is not None:
+                open_episode["end"] = _stamp(when)
             self.episodes.insert(
                 0,
                 {
@@ -221,10 +296,15 @@ class AlarmLog:
                 },
             )
             del self.episodes[ALARM_EPISODES:]
-            changed = True
-        if changed:
+            self.last_confirmed = when
             self._save()
-        return changed
+            return True
+        if complete and open_episode is not None:
+            open_episode["end"] = _stamp(when)
+            self.last_confirmed = None
+            self._save()
+            return True
+        return False
 
     def _save(self) -> None:
         try:

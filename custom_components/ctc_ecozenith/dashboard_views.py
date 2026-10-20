@@ -168,13 +168,23 @@ _EVENT_ROWS = ("events",)
 #: colours, which the card turns into --<name>-color; the enum chips stay grey
 #: and say what they read whatever it is.
 _CHIP_COLOURS = {
-    "alarm": "error",
+    "display_alarm": "error",
     "blocked": "warning",
     "smartgrid_active": "warning",
     "defrosting": "info",
     "compressor_running": "success",
     "immersion_active": "success",
 }
+#: The line of chips shows the display's alarm where the status list shows the
+#: heat pump's own alarm status: the red chip is for what the panel shows, and
+#: the list keeps the register's reading as it is.
+_CHIP_LINE = tuple(
+    "display_alarm" if key == "alarm" else key for key in _STATUS_TILES + _STATUS_ROWS
+)
+#: What a chip reads in place of its own word while it is on, where the entity
+#: carries it: the first of the attributes named that is there. The display's
+#: alarm reads the code and the text as the panel prints them.
+_CHIP_VALUE_ATTRIBUTES = {"display_alarm": ("visat", "shown")}
 #: What a binary sensor reads while it is on.
 _ON = "on"
 
@@ -335,7 +345,8 @@ _BUTTON = "button."
 #: The full list, group by group, so that every value the integration makes has
 #: a place in it: (id, icon, keys). Display values follow, a group per page.
 _VALUE_GROUPS = (
-    ("status", ICON, _STATUS_TILES + _STATUS_ROWS + _EVENT_ROWS + ("last_alarm",)),
+    ("status", ICON,
+     _STATUS_TILES + _STATUS_ROWS + ("display_alarm",) + _EVENT_ROWS + ("last_alarm",)),
     ("control", "mdi:tune-variant",
      (_OVERRIDES, *(k for _id, _icon, keys in _CONTROL_GROUPS for k in keys))),
     _TROUBLESHOOTING,
@@ -975,6 +986,8 @@ class _Builder:
             if key in _CHIP_COLOURS:
                 item["on_state"] = _ON
                 item["color"] = _CHIP_COLOURS[key]
+            if key in _CHIP_VALUE_ATTRIBUTES:
+                item["value_attribute"] = list(_CHIP_VALUE_ATTRIBUTES[key])
             items.append(item)
         return self._card(CHIPS_CARD, "items", items)
 
@@ -1092,7 +1105,7 @@ def overview_sections(
     sections = [
         # The whole width: a line of chips reads as one line.
         _section(_heading(str(pump.get("name") or TITLE), ICON),
-                 [build.chips(_STATUS_TILES + _STATUS_ROWS)], column_span=4),
+                 [build.chips(_CHIP_LINE)], column_span=4),
         _overrides_section(build, text),
         _section(_heading(text["quick"], "mdi:tune-variant"),
                  [build.controls(_QUICK_CONTROLS)]),

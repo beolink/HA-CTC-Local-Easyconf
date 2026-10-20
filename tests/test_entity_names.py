@@ -179,6 +179,21 @@ def _assigned(tree: ast.Module, name: str) -> ast.expr:
     raise AssertionError(name)
 
 
+def _own_translation_keys(tree) -> set[str]:
+    """The translation keys a module sets on an entity class of its own, as a literal."""
+    return {
+        node.value.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name | ast.Attribute)
+            and getattr(target, "id", getattr(target, "attr", "")) == "_attr_translation_key"
+            for target in node.targets
+        )
+        and isinstance(node.value, ast.Constant)
+    }
+
+
 def _keys_in_code(const, transitions) -> dict[str, set[str]]:
     """Every translation key the code names, by platform: the entities' keys."""
     sensor = _tree("sensor.py")
@@ -188,17 +203,7 @@ def _keys_in_code(const, transitions) -> dict[str, set[str]]:
         if isinstance(node, ast.For) and isinstance(node.target, ast.Name)
         and node.target.id == "span"
     )
-    own_keys = {
-        node.value.value
-        for node in ast.walk(sensor)
-        if isinstance(node, ast.Assign)
-        and any(
-            isinstance(target, ast.Name | ast.Attribute)
-            and getattr(target, "id", getattr(target, "attr", "")) == "_attr_translation_key"
-            for target in node.targets
-        )
-        and isinstance(node.value, ast.Constant)
-    }
+    own_keys = _own_translation_keys(sensor)
     return {
         "sensor": (
             {d.key for d in const.MODBUS_SENSORS + const.MODBUS_SETTINGS}
@@ -216,7 +221,7 @@ def _keys_in_code(const, transitions) -> dict[str, set[str]]:
         ),
         "binary_sensor": {
             key for key, _name in _constant_args(_tree("binary_sensor.py"), "DerivedBinary")
-        },
+        } | _own_translation_keys(_tree("binary_sensor.py")),
         "number": {r.key for r in const.CONTROL_NUMBERS},
         "select": {r.key for r in const.CONTROL_SELECTS},
         "button": {"release_control"},

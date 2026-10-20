@@ -32,7 +32,7 @@ from homeassistant.loader import async_get_integration
 from homeassistant.util import dt as dt_util
 
 from . import dashboard
-from .alarms import STORAGE_VERSION as ALARM_STORAGE_VERSION, AlarmLog
+from .alarms import STORAGE_VERSION as ALARM_STORAGE_VERSION, AlarmLog, confirm_window
 from .catalogue import (
     MenuReading,
     async_discover_pages,
@@ -1545,16 +1545,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
         # harvest notes it page by page; this concludes once per round, after
         # the listeners of the round have what they need, with the outdoor
         # temperature Modbus has at that moment. A round that read no page is
-        # no information and leaves the log alone.
-        alarms = AlarmLog(Store(hass, ALARM_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_alarms"))
+        # no information and leaves the log alone; a round that read fewer
+        # pages than all that can print an alarm may show one but cannot close
+        # an episode. A seen alarm is held for the harvest interval, see
+        # alarms.confirm_window.
+        alarms = AlarmLog(
+            Store(hass, ALARM_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_alarms"),
+            confirm_within=confirm_window(web.interval),
+        )
         await alarms.async_load()
         runtime.alarms = alarms
 
         def _conclude_alarms() -> None:
-            read_any, shown = web.alarms.fresh()
-            if read_any:
+            seen = web.alarms.fresh()
+            if seen.read:
                 alarms.note(
-                    shown, datetime.now(UTC), (modbus.data or {}).get("outdoor_temp")
+                    seen.shown,
+                    datetime.now(UTC),
+                    (modbus.data or {}).get("outdoor_temp"),
+                    complete=seen.complete,
                 )
 
         _conclude_alarms()

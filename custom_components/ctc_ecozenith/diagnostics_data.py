@@ -403,8 +403,10 @@ def alarms_section(runtime: Any) -> dict[str, Any] | None:
     alarms = getattr(runtime, "alarms", None)
     if alarms is None:
         return None
+    confirmed = getattr(alarms, "last_confirmed", None)
     return {
         "active": getattr(alarms, "active", None),
+        "last_confirmed": confirmed.isoformat(timespec="seconds") if confirmed else None,
         "episodes": [dict(episode) for episode in getattr(alarms, "episodes", None) or []],
     }
 

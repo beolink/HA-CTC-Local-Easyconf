@@ -141,7 +141,7 @@ def runtime(const, cop, transitions, alarms, identity):
 
     log = alarms.AlarmLog(FakeStore())
     log.note("[E040] Lågt flöde, enhet 7208 2540 0001", NOW - timedelta(hours=3), 6.5)
-    log.note(None, NOW - timedelta(hours=2), 6.8)
+    log.note(None, NOW - timedelta(hours=2), 6.8, complete=True)
 
     web = SimpleNamespace(
         interval=1800,

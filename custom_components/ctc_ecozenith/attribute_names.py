@@ -54,6 +54,11 @@ ENGLISH: Final[dict[str, str]] = {
     # the start like R49's.
     "elpatron kWh": "immersion_kwh",
     "kompressor kWh": "compressor_kwh",
+    # The display's alarm: the text the panel prints, and whether a round has
+    # seen it lately, with the time it last did.
+    "visat": "shown",
+    "senast bekräftad": "last_confirmed",
+    "bekräftad": "confirmed",
 }
 
 #: The keys inside each alarm episode, Swedish to English, for ``episodes``.

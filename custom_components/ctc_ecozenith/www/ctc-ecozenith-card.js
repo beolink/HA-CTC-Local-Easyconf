@@ -684,6 +684,18 @@
       note.appendChild(lead);
     }
 
+    /** The chip's word while it is on. An item may name attributes that carry
+     *  the text to show instead, the first of them there: the display's alarm
+     *  shows its code and text that way. Its own word for the state otherwise. */
+    _chipText(item, stateObj) {
+      const attributes = (stateObj && stateObj.attributes) || {};
+      for (const name of [].concat(item.value_attribute || [])) {
+        const found = attributes[name];
+        if (found !== undefined && found !== null && String(found) !== "") return String(found);
+      }
+      return String(this._text(item, stateObj));
+    }
+
     _update() {
       if (!this._hass) return;
       for (const row of this._items) {
@@ -698,7 +710,7 @@
         // word that is the name over again is not written twice: an alarm
         // chip named "Larm" whose word for on is "Larm" reads "Larm" once,
         // the name being the message and the colour the state.
-        const text = String(this._text(row.item, stateObj));
+        const text = this._chipText(row.item, stateObj);
         const label = String(row.item.name || row.item.entity);
         const repeat = text.toLowerCase() === label.toLowerCase();
         row.value.textContent = repeat ? "" : text;

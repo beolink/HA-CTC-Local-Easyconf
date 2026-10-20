@@ -688,6 +688,31 @@ DERIVED: dict[str, Text] = {
         "alarm. The attribute episodes carries the ten latest alarms the display has shown, with "
         "code, start, end and the outdoor temperature when the alarm began.",
     ),
+    "display_alarm": Text(
+        "Till när displayen visar ett larm. Larmet läses ur displayens egna larmtexter med "
+        "E-kod, på de sidor som hämtas, och inte ur ett register i värmepumpen. Det räknas som "
+        "visat när en hämtning har sett det på panelen inom den senaste tidsgränsen, som är 15 "
+        "minuter eller ett hämtningsintervall plus fem minuter om det är längre. Då är sensorn "
+        "till även när binärsensorn Larm är av. Bekräftad säger om larmet står så, och senast "
+        "bekräftad när panelen senast visade det. Obekräftat betyder att ingen hämtning inom "
+        "tidsgränsen har sett larmet på panelen, till exempel för att displayen inte gick att läsa "
+        "eller för att den senaste hämtningen inte läste alla sidor som kan visa ett larm. Loggen "
+        "kan då ha ett öppet larm som ingen längre har sett, och då är sensorn av. Sensorn är "
+        "också till när värmepumpens egen larmstatus är till, så att ett larm inte missas bara "
+        "för att displayen inte visar det.",
+        "On while the display shows an alarm. The alarm is read from the display's own alarm "
+        "texts, with the E-code, on the pages that are harvested, and not from a register in the "
+        "heat pump. An alarm counts as shown when a harvest has seen it on the panel within the "
+        "last window, which is 15 minutes or one harvest interval plus five minutes if that is "
+        "longer, and then the sensor is on even while the Alarm sensor is off. The attribute "
+        "confirmed says whether the alarm is confirmed, and last_confirmed when the panel last "
+        "showed it. Not confirmed means no harvest within the window has seen the alarm on the "
+        "panel, for instance because the display could not be read, or because the latest harvest "
+        "did not read every page that can show an alarm. The log may then hold an open alarm that "
+        "nobody has seen lately, and the sensor is off. The sensor is also on while the heat "
+        "pump's own alarm status is on, so an alarm is not missed just because the display does "
+        "not show it.",
+    ),
     "last_alarm": Text(
         "Det larm displayen visade senast, med E-kod och text så som panelen skriver dem, "
         "till exempel [E017] Givare solpaneler ut. Läses ur rubrikikonen längst upp till "
@@ -1493,6 +1518,11 @@ _SOURCES: dict[str, Text] = {
     "active_overrides": Text(
         "Räknas fram ur det Home Assistant skriver till pumpens flyktiga styrregister",
         "Worked out from what Home Assistant writes to the heat pump's volatile control registers",
+    ),
+    "display_alarm": Text(
+        "Larmtexterna på displayens hämtade sidor, och Modbus-register 62017 för värmepumpens larm",
+        "The alarm texts on the display's harvested pages, and Modbus register 62017 for the heat "
+        "pump's alarm",
     ),
     **dict.fromkeys(("compressor_running", "defrosting", "alarm", "blocked"), _DERIVED_FROM_STATUS),
     **dict.fromkeys(

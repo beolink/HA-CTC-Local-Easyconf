@@ -50,6 +50,10 @@ EXPECTED = {
     # R28: the two energies beside the share of auxiliary heat.
     "elpatron kWh": "immersion_kwh",
     "kompressor kWh": "compressor_kwh",
+    # 0.27.1: the display's alarm, the text the panel prints and when a round last saw it.
+    "visat": "shown",
+    "senast bekräftad": "last_confirmed",
+    "bekräftad": "confirmed",
 }
 
 READ =datetime(2026, 10, 9, 11, 40, tzinfo=UTC)
