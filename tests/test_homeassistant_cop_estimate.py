@@ -65,8 +65,11 @@ PUMP = 22
 PUMP_SCREEN = PUMP * 10
 HEAT = "p22_avgiven_varme"
 INVERTER = "p22_inverter_motoreffekt"
-#: The page answers in tenths of a kilowatt: the delivered heat, then the inverter's power.
-PANEL: dict[str, int] = {"heat": 24, "inverter": 20}
+EVAPORATION = "p22_forangning_degc_bar_1"
+CONDENSATION = "p22_kondensering_degc_bar_1"
+#: The page answers in tenths: the delivered heat and the inverter's power in kilowatts,
+#: then the evaporating and the condensing temperature in °C.
+PANEL: dict[str, int] = {"heat": 24, "inverter": 20, "evaporation": 20, "condensation": 380}
 #: The moment the readings are stamped with, moved on by _next_harvest.
 CLOCK: dict[str, datetime] = {}
 
@@ -89,28 +92,50 @@ PAGES = [
     ),
 ]
 
+#: The same page with the refrigerant circuit's two temperature rows on it as well,
+#: as the panel prints them, a temperature and a pressure each (0.28.0).
+CARNOT_PAGES = [
+    SlowPage(
+        page=PUMP,
+        title="Driftinfo Värmepump",
+        screens=[PUMP_SCREEN],
+        values=[
+            *PAGES[0].values,
+            SlowValue(
+                key=EVAPORATION, label="Förångning °C/bar 1", page=PUMP, screen=PUMP_SCREEN,
+                fmt="%.1f", var_indices=[2], unit=None, scale=0.1,
+            ),
+            SlowValue(
+                key=CONDENSATION, label="Kondensering °C/bar 1", page=PUMP, screen=PUMP_SCREEN,
+                fmt="%.1f", var_indices=[3], unit=None, scale=0.1,
+            ),
+        ],
+        route=[(220, 255)],
+    ),
+]
+
 
 class PumpPanel(LivePanel):
     """The answering panel, with the heat pump's page reading what PANEL says."""
 
     async def async_vars(self, screen) -> list:
         if screen == PUMP_SCREEN:
-            return [PANEL["heat"], PANEL["inverter"]]
+            return [PANEL["heat"], PANEL["inverter"], PANEL["evaporation"], PANEL["condensation"]]
         return await super().async_vars(screen)
 
 
 @pytest.fixture(autouse=True)
 def pump_panel(stubs, monkeypatch):
     LivePanel.instances.clear()
-    PANEL.update(heat=24, inverter=20)
+    PANEL.update(heat=24, inverter=20, evaporation=20, condensation=380)
     CLOCK["now"] = dt_util.utcnow().replace(microsecond=0)
     monkeypatch.setattr(integration, "CtcWebClient", PumpPanel)
     monkeypatch.setattr(coordinator, "utcnow", lambda: CLOCK["now"])
     yield
 
 
-async def _entry(hass) -> MockConfigEntry:
-    stored = pages_to_storage(PAGES)
+async def _entry(hass, pages=PAGES) -> MockConfigEntry:
+    stored = pages_to_storage(pages)
     version = str((await async_get_integration(hass, DOMAIN)).version)
     return MockConfigEntry(
         domain=DOMAIN,
@@ -289,3 +314,42 @@ async def test_removing_the_entry_takes_the_estimate_store_with_it(hass, hass_st
     await hass.config_entries.async_remove(entry.entry_id)
     await hass.async_block_till_done()
     assert key not in hass_storage
+
+
+# --------------------------------------------- the heat worked out from the refrigerant circuit
+
+
+async def test_a_pump_that_reports_no_heat_gets_the_circuits_figure(hass, hass_storage, stubs):
+    PANEL["heat"] = 0
+    entry = await _entry(hass, CARNOT_PAGES)
+    await _set_up(hass, entry)
+    await _first_harvest(hass)
+    await _next_harvest(hass)
+
+    # 2.0 and 38.0 °C: half of Carnot, 0.5 x 311.15 / 36.0 = 4.32.
+    for span in ("day", "lifetime", "now"):
+        state = _estimate(hass, span)
+        assert float(state.state) == pytest.approx(4.32), span
+        assert state.attributes["method"] == "Carnot ur köldmediekretsen, approximation", span
+        assert state.attributes["uncertainty"] == "±20 %", span
+        assert "reason" not in state.attributes, span
+    assert _estimate(hass, "day").attributes["heat_hours"] == pytest.approx(0.5)
+    assert entry.runtime_data.refrigerant_rows is not None
+    assert entry.runtime_data.carnot_estimate.lifetime().hours == pytest.approx(0.5)
+
+
+async def test_a_pump_that_reports_heat_keeps_the_measured_figure_beside_the_circuit(
+    hass, hass_storage, stubs
+):
+    entry = await _entry(hass, CARNOT_PAGES)
+    await _set_up(hass, entry)
+    await _first_harvest(hass)
+    await _next_harvest(hass)
+
+    for span in ("day", "lifetime", "now"):
+        state = _estimate(hass, span)
+        assert float(state.state) == pytest.approx(1.2), span
+        assert state.attributes["method"] == "integrerad effekt, approximation", span
+        assert "uncertainty" not in state.attributes, span
+    # The circuit's sums are kept all the same, for the diagnostics.
+    assert entry.runtime_data.carnot_estimate.lifetime().hours == pytest.approx(0.5)

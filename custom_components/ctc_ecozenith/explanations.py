@@ -195,27 +195,42 @@ _ESTIMATE_BOUNDS_EN = f"{ESTIMATE_MIN:.0f} to {ESTIMATE_MAX:.0f}"
 _ESTIMATE_GAP = f"{int(MAX_GAP.total_seconds() // 3600)} timmar"
 _ESTIMATE_GAP_EN = f"{int(MAX_GAP.total_seconds() // 3600)} hours"
 _ESTIMATE_WHAT = Text(
-    "Uppskattning, ingen räknare: avgiven värme delat med inverterns el, där båda är integrerade "
-    "ur displayens två effekter, Avgiven värme (kW) och Inverter Motoreffekt (kW), som läses i "
-    "samma skörd. Uppskattningen är grov men vetenskapligt grundad: den bygger på att integrera "
-    "två uppmätta effekter över tid. Elen är inverterns effekt till kompressorn, inte pumpens "
-    "hela tillförda el, så talet kan ligga något högre än räknarna.",
-    "An estimate, not a counter: delivered heat divided by the inverter's electricity, where both "
-    "are integrated from the display's two powers, Avgiven värme (kW) and Inverter Motoreffekt "
-    "(kW), read in the same harvest. The estimate is rough but scientifically grounded: it rests "
-    "on integrating two measured powers over time. The electricity is the inverter's power to the "
-    "compressor, not the heat pump's whole supplied electricity, so the figure can run somewhat "
-    "above the counters.",
+    "Uppskattning, ingen räknare: avgiven värme delat med el, där båda är integrerade över tid "
+    "ur värden som läses i samma skörd. Där pumpen redovisar avgiven värme är det displayens två "
+    "effekter, Avgiven värme (kW) och Inverter Motoreffekt (kW). Elen är då inverterns effekt "
+    "till kompressorn, inte pumpens hela tillförda el, så talet kan ligga något högre än "
+    "räknarna. Där pumpen inte redovisar någon avgiven värme, som när flödesmätaren saknas, "
+    "räknas värmen i stället fram ur köldmediekretsen: Carnots värmefaktor ur raderna Förångning "
+    "och Kondensering, gånger den andel av den som en annan CTC-pump med flödesmätare uppmättes "
+    "ge, gånger elen ur Inverter Motoreffekt (kW). Under avfrostning räknas elen men ingen värme. "
+    "Uppskattningen är grov men vetenskapligt grundad: den bygger på uppmätta effekter och "
+    "temperaturer integrerade över tid, och på kylprocessens fysik.",
+    "An estimate, not a counter: delivered heat divided by electricity, where both are integrated "
+    "over time from values read in the same harvest. Where the heat pump reports delivered heat "
+    "these are the display's two powers, Avgiven värme (kW) and Inverter Motoreffekt (kW). The "
+    "electricity is then the inverter's power to the compressor, not the heat pump's whole "
+    "supplied electricity, so the figure can run somewhat above the counters. Where the heat "
+    "pump reports no delivered heat at all, as when the flow meter is missing, the heat is "
+    "worked out from the refrigerant circuit instead: the Carnot coefficient of performance from "
+    "the rows Förångning and Kondensering, times the share of it another CTC heat pump with a "
+    "flow meter was measured to give, times the electricity from Inverter Motoreffekt (kW). "
+    "During a defrost the electricity counts and no heat does. The estimate is rough but "
+    "scientifically grounded: it rests on measured powers and temperatures integrated over time, "
+    "and on the physics of the refrigeration cycle.",
 )
 _ESTIMATE_EDGES = Text(
     "Visas inte där värmen är noll hela tiden, eller när talet ligger utanför "
-    f"{_ESTIMATE_BOUNDS}. Pumpar som inte redovisar avgiven värme får inget tal, och attributet "
-    "skäl säger då varför. Attributen method, heat_hours och electric_hours visar hur talet "
-    "är framtaget och hur många timmar mätningar det vilar på.",
+    f"{_ESTIMATE_BOUNDS}. Pumpar som varken redovisar avgiven värme eller visar köldmediekretsens "
+    "temperaturer får inget tal, och attributet skäl säger då varför. Attributen method, "
+    "heat_hours och electric_hours visar hur talet är framtaget och hur många timmar mätningar "
+    "det vilar på. När värmen räknas fram ur köldmediekretsen visar attributet uncertainty hur "
+    "långt från det verkliga talet det kan ligga.",
     "Not shown where the heat has been zero all the time, or where the figure lies outside "
-    f"{_ESTIMATE_BOUNDS_EN}. Heat pumps that do not report any heat output get no figure, and "
-    "the attribute reason says why. The attributes method, heat_hours and electric_hours show how "
-    "the figure is made and how many hours of measurements it rests on.",
+    f"{_ESTIMATE_BOUNDS_EN}. Heat pumps that neither report any heat output nor show the "
+    "refrigerant circuit's temperatures get no figure, and the attribute reason says why. The "
+    "attributes method, heat_hours and electric_hours show how the figure is made and how many "
+    "hours of measurements it rests on. Where the heat is worked out from the refrigerant "
+    "circuit, the attribute uncertainty shows how far from the true figure it can lie.",
 )
 
 #: When the day's starts and defrosts begin again from nought. The watch that
@@ -1556,20 +1571,26 @@ _SOURCES: dict[str, Text] = {
     # Before the cop_ fallback below, which would name the energy counters.
     "cop_estimate_day": Text(
         "Räknas fram ur displayens rader Avgiven värme (kW) och Inverter Motoreffekt (kW), "
+        "eller Förångning och Kondensering där pumpen inte redovisar avgiven värme, "
         "integrerade sedan midnatt",
         "Worked out from the display's rows Avgiven värme (kW) and Inverter Motoreffekt (kW), "
+        "or Förångning and Kondensering where the heat pump reports no heat output, "
         "integrated since midnight",
     ),
     "cop_estimate_lifetime": Text(
         "Räknas fram ur displayens rader Avgiven värme (kW) och Inverter Motoreffekt (kW), "
+        "eller Förångning och Kondensering där pumpen inte redovisar avgiven värme, "
         "integrerade över hela tiden",
         "Worked out from the display's rows Avgiven värme (kW) and Inverter Motoreffekt (kW), "
+        "or Förångning and Kondensering where the heat pump reports no heat output, "
         "integrated over the whole time",
     ),
     "cop_estimate_now": Text(
         "Räknas fram ur displayens rader Avgiven värme (kW) och Inverter Motoreffekt (kW), "
+        "eller Förångning och Kondensering där pumpen inte redovisar avgiven värme, "
         "i den senaste skörden",
         "Worked out from the display's rows Avgiven värme (kW) and Inverter Motoreffekt (kW), "
+        "or Förångning and Kondensering where the heat pump reports no heat output, "
         "in the latest harvest",
     ),
 }

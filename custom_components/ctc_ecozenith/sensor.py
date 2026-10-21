@@ -53,7 +53,14 @@ from .cop import (
     stale_rows,
     totals_source,
 )
-from .cop_estimate import ESTIMATE_SPANS, METHOD, estimate_for
+from .cop_estimate import (
+    BASIS_CARNOT,
+    CARNOT_UNCERTAINTY,
+    ESTIMATE_SPANS,
+    METHOD,
+    METHOD_CARNOT,
+    estimate_for,
+)
 from .entity import async_switch_on_new_defaults
 from .explanations import ESTIMATE_REASONS
 from .keys import prefix_of, previous_keys, unique_id
@@ -887,11 +894,15 @@ class CtcCopEstimateSensor(CoordinatorEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, object]:
         estimate = estimate_for(self._runtime, self._span)
+        carnot = estimate.basis == BASIS_CARNOT
         attributes: dict[str, object] = {
-            "method": METHOD,
+            "method": METHOD_CARNOT if carnot else METHOD,
             "heat_hours": estimate.heat_hours,
             "electric_hours": estimate.electric_hours,
         }
+        if carnot:
+            # Worked out from the refrigerant circuit, calibrated on another model.
+            attributes["uncertainty"] = CARNOT_UNCERTAINTY
         if self._span == "now" and estimate.read_at is not None:
             attributes["read_at"] = estimate.read_at.isoformat(timespec="seconds")
         if estimate.reason is not None:

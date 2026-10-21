@@ -443,6 +443,8 @@ def test_the_sums_as_the_diagnostics_hold_them(estimate_mod, integrate):
     bare = estimate_mod.estimate_section(SimpleNamespace(), _local(20, 10))
     assert bare == {
         "heat_row_found": False, "inverter_row_found": False, "lifetime": None, "today": None,
+        "refrigerant_rows_found": False, "basis": "measured",
+        "carnot": {"lifetime": None, "today": None},
     }
 
 
@@ -523,3 +525,183 @@ def test_the_three_reasons_the_owner_is_told_about_read_as_they_are_meant(explan
 def test_the_estimate_reasons_stay_out_of_the_tables_that_hold_sentences(explanations):
     for table in explanations.TABLES:
         assert not set(table) & set(explanations.ESTIMATE_REASONS)
+
+
+# ------------------------------------------- the heat worked out from the refrigerant circuit
+#
+# For the heat pumps that report no delivered heat (0.28.0). The figures below are of the
+# size an EcoAir 622M shows on a mild day; no owner's report is used.
+
+
+def test_the_carnot_constants_are_the_calibrated_ones(estimate_mod):
+    assert estimate_mod.CARNOT_EFFICIENCY == 0.50
+    assert estimate_mod.INVERTER_SHARE == 0.95
+    assert estimate_mod.MIN_LIFT == 10.0
+    assert estimate_mod.METHOD_CARNOT == "Carnot ur köldmediekretsen, approximation"
+    assert estimate_mod.CARNOT_UNCERTAINTY == "±20 %"
+
+
+def test_the_circuit_rows_are_the_temperatures_of_the_two_pairs(const, estimate_mod):
+    page = const.SlowPage(page=22, title="Driftinfo Värmepump", screens=[118])
+    page.values = [
+        _row(const, "Förångning °C/bar 2", "evap_bar", unit=None),
+        _row(const, "Förångning °C/bar 1", "evap", unit=None),
+        _row(const, "Kondensering °C/bar 2", "cond_bar", unit=None),
+        _row(const, "Kondensering °C/bar 1", "cond", unit=None),
+    ]
+    evaporation, condensation = estimate_mod.find_refrigerant_rows([page])
+    assert (evaporation.key, condensation.key) == ("evap", "cond")
+    page.values = page.values[:2]
+    assert estimate_mod.find_refrigerant_rows([page]) is None
+    assert estimate_mod.find_refrigerant_rows([]) is None
+
+
+def test_the_carnot_heat_is_half_of_carnot_times_the_electricity(estimate_mod):
+    # -2.2 and 36.7 °C: Carnot 309.85 / 38.9 = 7.965, half of it 3.98.
+    heat = estimate_mod.carnot_heat(-2.2, 36.7, 1.0)
+    assert heat == pytest.approx(0.5 * 309.85 / 38.9)
+    assert estimate_mod.carnot_heat(-2.2, 36.7, 2.0) == pytest.approx(2 * heat)
+    # Closer than ten kelvin is no circuit at work.
+    assert estimate_mod.carnot_heat(30.0, 39.9, 1.0) is None
+    assert estimate_mod.carnot_heat(30.0, 40.0, 1.0) is not None
+
+
+def test_one_reading_of_the_circuit(estimate_mod):
+    data = {"evap": -2.2, "cond": 36.7, "motor": 2.1}
+    heat, electric = estimate_mod.carnot_pair(data, "evap", "cond", "motor")
+    assert electric == pytest.approx(2.1 / 0.95)
+    assert heat / electric == pytest.approx(0.5 * 309.85 / 38.9)
+    # The compressor at rest uses nothing and gives nothing.
+    assert estimate_mod.carnot_pair({**data, "motor": 0}, "evap", "cond", "motor") == (0.0, 0.0)
+    # A defrost spends electricity and gives no heat, whatever the temperatures say.
+    assert estimate_mod.carnot_pair(data, "evap", "cond", "motor", defrosting=True) == (
+        0.0, pytest.approx(2.1 / 0.95),
+    )
+    # Two temperatures too close count the electricity and no heat.
+    heat, electric = estimate_mod.carnot_pair(
+        {"evap": 30.0, "cond": 35.0, "motor": 1.0}, "evap", "cond", "motor"
+    )
+    assert heat == 0.0 and electric == pytest.approx(1 / 0.95)
+    # No power, or a running compressor without its temperatures, is no reading.
+    assert estimate_mod.carnot_pair({"evap": -2.2, "cond": 36.7}, "evap", "cond", "motor") is None
+    assert estimate_mod.carnot_pair({"motor": 2.1}, "evap", "cond", "motor") is None
+    assert estimate_mod.carnot_pair(None, "evap", "cond", "motor") is None
+
+
+def _carnot_runtime(estimate_mod, integrate, *, readings=(), data=None, read=None,
+                    evap_read=None, measured_heat=0.0, defrosting=False):
+    read_at = {"motor": read, "evap": read if evap_read is None else evap_read, "cond": read}
+    web = SimpleNamespace(data=data or {}, last_read=lambda key: read_at.get(key))
+    carnot = integrate.EstimateIntegrator(FakeStore(), zone=STOCKHOLM)
+    for when, row in readings:
+        carnot.note(when, *estimate_mod.carnot_pair(row, "evap", "cond", "motor"))
+    measured = integrate.EstimateIntegrator(FakeStore(), zone=STOCKHOLM)
+    if measured_heat:
+        measured.note(_local(20, 6), measured_heat, 1.0)
+        measured.note(_local(20, 6, 30), measured_heat, 1.0)
+    return SimpleNamespace(
+        web=web,
+        power_out=SimpleNamespace(key="out", label="Avgiven värme"),
+        inverter_power=SimpleNamespace(key="motor", label="Inverter Motoreffekt"),
+        refrigerant_rows=(SimpleNamespace(key="evap"), SimpleNamespace(key="cond")),
+        heat_estimate=measured,
+        carnot_estimate=carnot,
+        transitions=SimpleNamespace(defrosting=defrosting),
+    )
+
+
+MILD = {"evap": 2.0, "cond": 38.0, "motor": 1.0}
+
+
+def test_a_pump_that_reports_no_heat_gets_the_circuits_figure(estimate_mod, integrate):
+    readings = [(_local(20, 8) + timedelta(minutes=30 * i), MILD) for i in range(5)]
+    runtime = _carnot_runtime(estimate_mod, integrate, readings=readings)
+    assert estimate_mod.uses_carnot(runtime)
+    expected = round(0.5 * (38.0 + 273.15) / 36.0, 2)
+    for span in ("day", "lifetime"):
+        result = estimate_mod.estimate_for(runtime, span, _local(20, 11))
+        assert (result.value, result.reason, result.basis) == (expected, None, "carnot")
+        assert result.heat_hours == pytest.approx(2.0)
+
+
+def test_a_pump_that_reports_heat_keeps_its_measured_figure(estimate_mod, integrate):
+    runtime = _carnot_runtime(
+        estimate_mod, integrate, readings=[(_local(20, 8), MILD), (_local(20, 8, 30), MILD)],
+        measured_heat=3.0,
+    )
+    assert not estimate_mod.uses_carnot(runtime)
+    result = estimate_mod.estimate_for(runtime, "lifetime", _local(20, 11))
+    assert (result.value, result.basis) == (3.0, "measured")
+
+
+def test_without_the_circuit_rows_the_pump_that_reports_no_heat_still_says_so(
+    estimate_mod, integrate
+):
+    runtime = _carnot_runtime(estimate_mod, integrate)
+    runtime.refrigerant_rows = None
+    runtime.heat_estimate.note(_local(20, 8), 0.0, 1.0)
+    runtime.heat_estimate.note(_local(20, 8, 30), 0.0, 1.0)
+    assert not estimate_mod.uses_carnot(runtime)
+    result = estimate_mod.estimate_for(runtime, "lifetime", _local(20, 11))
+    assert (result.value, result.reason) == (None, estimate_mod.NO_HEAT)
+
+
+def test_the_circuits_now_figure_needs_one_harvest(estimate_mod, integrate):
+    read = _local(20, 10)
+    runtime = _carnot_runtime(estimate_mod, integrate, data=MILD, read=read)
+    result = estimate_mod.estimate_for(runtime, "now", _local(20, 10, 5))
+    assert result.value == round(0.5 * 311.15 / 36.0, 2)
+    assert (result.basis, result.read_at) == ("carnot", read)
+    split = _carnot_runtime(
+        estimate_mod, integrate, data=MILD, read=read, evap_read=read - timedelta(minutes=30)
+    )
+    assert estimate_mod.estimate_for(split, "now", _local(20, 10, 5)).reason == estimate_mod.SILENT
+
+
+def test_the_circuits_now_figure_at_rest_and_in_a_defrost(estimate_mod, integrate):
+    read = _local(20, 10)
+    resting = _carnot_runtime(estimate_mod, integrate, data={**MILD, "motor": 0}, read=read)
+    result = estimate_mod.estimate_for(resting, "now", _local(20, 10, 5))
+    # At rest there is no electricity to divide by, which is not "reports no heat".
+    assert (result.value, result.reason) == (None, estimate_mod.NO_ELECTRICITY)
+    defrost = _carnot_runtime(estimate_mod, integrate, data=MILD, read=read, defrosting=True)
+    result = estimate_mod.estimate_for(defrost, "now", _local(20, 10, 5))
+    assert (result.value, result.reason) == (None, estimate_mod.IMPLAUSIBLE)
+
+
+def test_a_defrost_reading_lowers_the_days_figure(estimate_mod, integrate):
+    plain = [(_local(20, 8) + timedelta(minutes=30 * i), MILD) for i in range(5)]
+    runtime = _carnot_runtime(estimate_mod, integrate, readings=plain)
+    clean = estimate_mod.estimate_for(runtime, "day", _local(20, 11)).value
+    runtime = _carnot_runtime(estimate_mod, integrate)
+    for i in range(5):
+        row = MILD
+        heat, electric = estimate_mod.carnot_pair(row, "evap", "cond", "motor", defrosting=i == 2)
+        runtime.carnot_estimate.note(_local(20, 8) + timedelta(minutes=30 * i), heat, electric)
+    assert estimate_mod.estimate_for(runtime, "day", _local(20, 11)).value < clean
+
+
+def test_the_diagnostics_hold_the_circuits_sums_and_the_basis(estimate_mod, integrate):
+    runtime = _carnot_runtime(
+        estimate_mod, integrate, readings=[(_local(20, 9), MILD), (_local(20, 9, 30), MILD)]
+    )
+    section = estimate_mod.estimate_section(runtime, _local(20, 10))
+    assert section["basis"] == "carnot"
+    assert section["refrigerant_rows_found"] is True
+    electric = round(0.5 / 0.95, 1)
+    assert section["carnot"]["lifetime"]["electric_kwh"] == electric
+    assert section["carnot"]["lifetime"]["hours"] == 0.5
+    assert section["carnot"]["today"] == section["carnot"]["lifetime"]
+
+
+@pytest.mark.parametrize("key", ESTIMATE_TEXTS)
+def test_the_estimate_texts_tell_of_the_refrigerant_circuit(explanations, key):
+    swedish = str(explanations.DERIVED[key])
+    english = explanations.DERIVED[key].en
+    for word in ("Förångning", "Kondensering", "Carnot"):
+        assert word in swedish and word in english, word
+    assert "avfrostning" in swedish and "defrost" in english
+    assert "flödesmätare" in swedish and "flow meter" in english
+    assert "uncertainty" in swedish and "uncertainty" in english
+    source_sv = explanations.source(key, lang="sv")
+    assert "Förångning" in source_sv and "Kondensering" in source_sv

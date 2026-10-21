@@ -98,7 +98,7 @@ from .cop import (
     power_now,
     powered_on_hours,
 )
-from .cop_estimate import find_inverter_power
+from .cop_estimate import carnot_pair, find_inverter_power, find_refrigerant_rows
 from .debug_report import (
     async_setup_debug_report,
     async_stop_debug_report,
@@ -1178,6 +1178,11 @@ class CtcRuntime:
     #: electricity comes from. See cop_estimate.py. Wherever the display is harvested.
     heat_estimate: EstimateIntegrator | None = None
     inverter_power: Any | None = None
+    #: The same estimate with the heat worked out from the refrigerant circuit,
+    #: for the heat pumps that report no delivered heat, and the evaporating and
+    #: condensing temperature rows it rests on. See cop_estimate.py.
+    carnot_estimate: EstimateIntegrator | None = None
+    refrigerant_rows: tuple[Any, Any] | None = None
     #: Candidate rows for the unit's powered-on hours; the largest is used.
     operating_hours: Any | None = None
     #: What this installation has ever given a value other than zero.
@@ -1482,6 +1487,42 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
 
             _estimate()
             entry.async_on_unload(web.async_add_listener(_estimate))
+        # The heat worked out from the refrigerant circuit instead, for the pumps
+        # that report none: the evaporating and condensing temperatures and the
+        # inverter's power of one harvest, and whether the pump is defrosting by
+        # its Modbus status. Kept beside the measured sums on every installation
+        # where the rows are harvested; the sensors show it only where the pump
+        # has never reported delivered heat (cop_estimate.uses_carnot).
+        runtime.refrigerant_rows = find_refrigerant_rows(pages)
+        carnot = EstimateIntegrator(
+            Store(
+                hass, INTEGRATE_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_cop_estimate_carnot"
+            ),
+            zone=dt_util.get_default_time_zone(),
+        )
+        await carnot.async_load()
+        runtime.carnot_estimate = carnot
+        if runtime.refrigerant_rows is not None and runtime.inverter_power is not None:
+            evaporation_key = runtime.refrigerant_rows[0].key
+            condensation_key = runtime.refrigerant_rows[1].key
+            motor_key = runtime.inverter_power.key
+
+            def _carnot() -> None:
+                when = web.last_read(motor_key)
+                if when is None or any(
+                    web.last_read(key) != when for key in (evaporation_key, condensation_key)
+                ):
+                    return
+                watch = runtime.transitions
+                pair = carnot_pair(
+                    web.data, evaporation_key, condensation_key, motor_key,
+                    defrosting=bool(watch is not None and watch.defrosting),
+                )
+                if pair is not None and carnot.note(when, *pair):
+                    carnot.save_soon()
+
+            _carnot()
+            entry.async_on_unload(web.async_add_listener(_carnot))
         runtime.starts_per_day = find_starts_per_day(pages)
         if runtime.energy_out is not None and runtime.energy_in is None:
             # The older display software, as on an i360, counts delivered heat
@@ -1760,5 +1801,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> None
     await Store(hass, 1, f"{DOMAIN}_{entry.entry_id}_cop").async_remove()
     await Store(
         hass, INTEGRATE_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_cop_estimate"
+    ).async_remove()
+    await Store(
+        hass, INTEGRATE_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_cop_estimate_carnot"
     ).async_remove()
     await Store(hass, ALARM_STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_alarms").async_remove()
