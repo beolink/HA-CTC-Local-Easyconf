@@ -1031,7 +1031,10 @@ indoor unit's model, the outdoor unit's model, the firmware in the display, in
 the heat pump's control board and in the control unit, the week the machine was
 built, and its coefficient of performance over the last day, over a rolling
 year, over the machine's first year and over its lifetime. The figures over a
-week and a month are not sent.
+week and a month are not sent. Beside them it sends the estimated coefficient of
+performance the integration's own sensors show, for today and since it began to
+add it up, and whether that estimate is worked out from the refrigerant circuit;
+on a heat pump whose counters read zero it is the only figure there is.
 
 An indoor unit the integration does not know yet is reported as "other", which
 says nothing about what turned up. For those alone the report adds a flag

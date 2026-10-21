@@ -237,6 +237,7 @@ FEATURE_KEYS = frozenset(
         "power_rows",
         "power_values",
         "cop_integrated",
+        "cop_estimate_carnot",
         "menu_pages",
         "menu_home",
         "menu_root",
@@ -248,6 +249,8 @@ METRIC_KEYS = frozenset(
         "cop_year",
         "cop_first_year",
         "cop_lifetime",
+        "cop_estimate_day",
+        "cop_estimate_lifetime",
         "heat_total_kwh",
         "consumption_total_kwh",
         "built_year",
@@ -291,6 +294,9 @@ def build_extra(
     cop_year: Any = None,
     cop_first_year: Any = None,
     cop_lifetime: Any = None,
+    cop_estimate_day: Any = None,
+    cop_estimate_lifetime: Any = None,
+    cop_estimate_carnot: bool | None = None,
 ) -> dict[str, Any]:
     """Build the integration specific part of the daily report.
 
@@ -360,6 +366,10 @@ def build_extra(
         "power_rows": power_rows,
         "power_values": power_values,
         "cop_integrated": cop_integrated,
+        # Whether the estimated coefficient of performance below is worked out
+        # from the refrigerant circuit (0.28.0) rather than from the display's
+        # delivered heat: the rougher of the two, on a pump that reports no heat.
+        "cop_estimate_carnot": cop_estimate_carnot,
     }
     payload["features"].update({k: bool(v) for k, v in flags.items() if v is not None})
 
@@ -405,6 +415,11 @@ def build_extra(
         "cop_year": cop_value(cop_year),
         "cop_first_year": cop_value(cop_first_year),
         "cop_lifetime": cop_value(cop_lifetime),
+        # The estimated coefficient of performance the sensors show, today and
+        # since the sums began, beside the counter based figures and never
+        # instead of them: on a pump whose counters read zero it is the only one.
+        "cop_estimate_day": cop_value(cop_estimate_day),
+        "cop_estimate_lifetime": cop_value(cop_estimate_lifetime),
         "heat_total_kwh": energy_value(heat_total_kwh),
         "consumption_total_kwh": energy_value(consumption_total_kwh),
         "built_year": 2000 + int(made[:2]) if made else None,

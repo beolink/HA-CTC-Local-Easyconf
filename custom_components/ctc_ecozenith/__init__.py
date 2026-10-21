@@ -98,7 +98,13 @@ from .cop import (
     power_now,
     powered_on_hours,
 )
-from .cop_estimate import carnot_pair, find_inverter_power, find_refrigerant_rows
+from .cop_estimate import (
+    carnot_pair,
+    estimate_for,
+    find_inverter_power,
+    find_refrigerant_rows,
+    uses_carnot,
+)
 from .debug_report import (
     async_setup_debug_report,
     async_stop_debug_report,
@@ -1031,6 +1037,11 @@ def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, An
         heat_total_kwh=heat if fault else None,
         consumption_total_kwh=consumed if fault else None,
         settings_stem=stem,
+        # The estimate the three sensors show (cop_estimate.py), where it has a
+        # figure, and whether it comes from the refrigerant circuit.
+        cop_estimate_day=estimate_for(runtime, "day").value,
+        cop_estimate_lifetime=estimate_for(runtime, "lifetime").value,
+        cop_estimate_carnot=uses_carnot(runtime),
         **menu,
         **cop_for_report(runtime),
     )

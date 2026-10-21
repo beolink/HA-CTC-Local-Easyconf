@@ -58,6 +58,9 @@ EVERYTHING = {
     "cop_year": 2.6,
     "cop_first_year": 2.5,
     "cop_lifetime": 2.47,
+    "cop_estimate_day": 3.16,
+    "cop_estimate_lifetime": 3.61,
+    "cop_estimate_carnot": True,
 }
 
 
@@ -89,14 +92,16 @@ def test_the_lists_hold_nothing_but_flags_and_numbers(stats_extra):
 
 def test_the_lists_do_not_overlap_and_are_what_the_consent_text_counts(stats_extra):
     assert not (stats_extra.FEATURE_KEYS & stats_extra.METRIC_KEYS)
-    # Four figures, two totals, three parts of the serial number's story.
-    assert len(stats_extra.METRIC_KEYS) == 9
+    # Four figures, two estimated ones, two totals, three parts of the serial
+    # number's story.
+    assert len(stats_extra.METRIC_KEYS) == 11
     # Four about the set-up, six about whether a figure is possible, three why
     # not, three about the two power rows on the heat pump's page, whether they
     # gave numbers, and a figure the integration worked out from them itself, and
     # three about the display's menu:
-    # how many pages it has, and how far the last walk through it got (R12, L6).
-    assert len(stats_extra.FEATURE_KEYS) == 19
+    # how many pages it has, and how far the last walk through it got (R12, L6),
+    # and whether the estimate comes from the refrigerant circuit (0.28.1).
+    assert len(stats_extra.FEATURE_KEYS) == 20
 
 
 def test_a_model_reported_as_other_adds_its_family_and_nothing_else(stats_extra):

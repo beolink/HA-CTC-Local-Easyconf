@@ -71,6 +71,9 @@ METRICS = {
     "cop_year": {"max": 10, "min": 0.5, "dec": 2},
     "cop_first_year": {"max": 10, "min": 0.5, "dec": 2},
     "cop_lifetime": {"max": 10, "min": 0.5, "dec": 2},
+    # beolink/stats 9a026db, 2026-10-21: the estimate, taken before 0.28.1 sends it.
+    "cop_estimate_day": {"max": 10, "min": 0.5, "dec": 2},
+    "cop_estimate_lifetime": {"max": 10, "min": 0.5, "dec": 2},
     "heat_total_kwh": {"max": 1000000, "dec": 1},
     "consumption_total_kwh": {"max": 1000000, "dec": 1},
     "built_year": {"max": 2100, "min": 1990, "dec": 0},
@@ -390,6 +393,8 @@ I360 = {
     "menu_pages": 6, "menu_home": True, "menu_root": True, "settings_stem": None,
     "heat_total_kwh": 12000.0, "consumption_total_kwh": 800.5,
     "cop_day": None, "cop_year": None, "cop_first_year": None, "cop_lifetime": 2.5,
+    # The estimate from the refrigerant circuit, as on a 600 series without a flow meter.
+    "cop_estimate_day": 3.16, "cop_estimate_lifetime": 3.614, "cop_estimate_carnot": True,
 }
 #: A model the integration does not know: reported as other, with its family.
 UNKNOWN = {**VSH, "model": "CTC (ezi9xx)", "settings_stem": "ezi9xx"}
