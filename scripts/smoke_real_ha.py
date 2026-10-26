@@ -651,7 +651,10 @@ async def _config_flow(hass: Any, report: Report, view: Any) -> None:
         with patch.object(flow_module, "async_discover_pages", read_menu):
             result = await flow.async_step_slow()
         fields = _check_step(view, "config", result)
-        assert fields == ["slow_pages", "slow_interval", "restore_page"], fields
+        # 0.29.0: the set-up form offers the live page and its interval as well.
+        assert fields == [
+            "slow_pages", "slow_interval", "restore_page", "live_page", "live_interval",
+        ], fields
 
 
 async def _options_flow(hass: Any, report: Report, view: Any) -> None:
