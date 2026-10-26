@@ -3,7 +3,7 @@
 The notes of a release are its tag's message, as the README says under
 Releases. This file collects what is on its way into the next release.
 
-## 0.29.0 (unreleased)
+## 0.29.0 (2026-10-26)
 
 ### Added
 
