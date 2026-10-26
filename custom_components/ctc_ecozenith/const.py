@@ -84,6 +84,20 @@ CONF_DEBUG_REPORT: Final = "debug_report"
 DEFAULT_FAST_INTERVAL: Final = 30
 DEFAULT_SLOW_INTERVAL: Final = 1800
 MIN_SLOW_INTERVAL: Final = 300
+#: Options: the live page, the page the panel rests on between two walks and
+#: is read off without a press while it shows it, and how often. The value
+#: is the page's number, or None for no live page; an entry without the key
+#: has none, so an installation from before the option keeps its panel where
+#: it was until the owner picks a page under Configure. A new set-up offers
+#: the heat pump's page, the one with the delivered heat and the supplied
+#: power (cop.live_page_default), ticked.
+CONF_LIVE_PAGE: Final = "live_page"
+CONF_LIVE_INTERVAL: Final = "live_interval"
+DEFAULT_LIVE_INTERVAL: Final = 60
+MIN_LIVE_INTERVAL: Final = 30
+MAX_LIVE_INTERVAL: Final = 3600
+#: The value of the live page's select that means no live page.
+LIVE_PAGE_NONE: Final = "none"
 
 # The display speaks many languages. Index 0 is always English, which is what we
 # match menu titles against, and index 1 is Swedish.

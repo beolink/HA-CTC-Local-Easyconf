@@ -102,6 +102,10 @@ class _Note(NamedTuple):
     text: str | None
     at: datetime
     carries: bool
+    #: A note from a read of one page between two walks, the live page read
+    #: off the panel while it rests on it: never the round that closes an
+    #: episode, however few pages can print an alarm.
+    partial: bool = False
 
 
 class AlarmWatch:
@@ -129,6 +133,7 @@ class AlarmWatch:
         page: SlowPage,
         values_by_screen: Mapping[int, list[Any]],
         read_at: datetime,
+        partial: bool = False,
     ) -> str | None:
         """Read a page's alarm texts off the values just harvested.
 
@@ -137,6 +142,12 @@ class AlarmWatch:
         the back button, not the header icon. A screen whose definition the
         display would not give up leaves the page unnoted this round, which is
         no information rather than "no alarm".
+
+        ``partial`` marks a note from the live page, read on its own between
+        two walks: it may show an alarm, and so open or confirm an episode,
+        but the round it makes is never complete (see :meth:`fresh`), so an
+        alarm the panel stops printing is closed by the next walk, which
+        reads every page that can print one.
         """
         screens = [
             screen
@@ -161,11 +172,17 @@ class AlarmWatch:
             carries = carries or reading.carries
             candidates.extend(reading.texts)
         text = alarm_text(candidates)
-        self._notes[page.page] = _Note(text, read_at, carries)
+        self._notes[page.page] = _Note(text, read_at, carries, partial)
         return text
 
     def fresh(self) -> AlarmRound:
-        """What was read since the last call, and whether every alarm page was read."""
+        """What was read since the last call, and whether every alarm page was read.
+
+        A round with a partial note in it, the live page read on its own, is
+        not complete whatever pages it reached: one page read between two
+        walks is not the walk that reads every page which can print an
+        alarm, even where that page is the only one that can.
+        """
         new = {
             page: note
             for page, note in self._notes.items()
@@ -181,7 +198,8 @@ class AlarmWatch:
             if page not in self._notes or self._notes[page].carries
         }
         shown = next((note.text for note in new.values() if note.text), None)
-        return AlarmRound(True, shown, expected <= set(new))
+        whole = expected <= set(new) and not any(note.partial for note in new.values())
+        return AlarmRound(True, shown, whole)
 
 
 def _stamp(when: datetime) -> str:

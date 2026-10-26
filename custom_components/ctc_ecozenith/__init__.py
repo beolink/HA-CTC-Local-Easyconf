@@ -37,6 +37,7 @@ from .catalogue import (
     MenuReading,
     async_discover_pages,
     async_rescan_pages,
+    live_page_among,
     menu_is_due,
     menu_root,
     menu_wait,
@@ -52,6 +53,8 @@ from .const import (
     CONF_IDENTITY,
     CONF_IDENTITY_SCREENS,
     CONF_LANGUAGE,
+    CONF_LIVE_INTERVAL,
+    CONF_LIVE_PAGE,
     CONF_MENU,
     CONF_MENU_ROOT,
     CONF_MENU_VERSION,
@@ -64,12 +67,14 @@ from .const import (
     CONF_VISIT_SYSTEM_INFO,
     CONF_WEB_PORT,
     DEFAULT_FAST_INTERVAL,
+    DEFAULT_LIVE_INTERVAL,
     DEFAULT_MODBUS_PORT,
     DEFAULT_SLAVE,
     DEFAULT_SLOW_INTERVAL,
     DEFAULT_WEB_PORT,
     DOMAIN,
     LANG_SWEDISH,
+    MIN_LIVE_INTERVAL,
     PLATFORMS,
     RELEASES_API,
     RELEASES_PAGE,
@@ -1439,6 +1444,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
             restore_page=bool(options.get(CONF_RESTORE_PAGE, True)),
             stored=stored,
             config_entry=entry,
+            # The page the panel rests on, where the owner picked one that is
+            # still harvested; an entry from before the option has none.
+            live_page=live_page_among(options.get(CONF_LIVE_PAGE), pages),
         )
         runtime.web = web
         runtime.pages = pages
@@ -1636,6 +1644,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: CtcConfigEntry) -> bool:
             )
 
         entry.async_on_unload(web.async_add_listener(_remember))
+
+        if web.live_page is not None:
+            # The live page, read off the panel without a press every live
+            # interval while the panel rests on it (CtcWebCoordinator.
+            # async_read_live_page). On a timer of its own rather than on the
+            # Modbus round: the display's web server is the slow one, and the
+            # floor keeps a read from meeting the one before it. Not while
+            # the entry's polling is switched off, as the walks are not. The
+            # timer goes with the entry, so a reload starts a new one on the
+            # new coordinator.
+            live_interval = max(
+                MIN_LIVE_INTERVAL, int(options.get(CONF_LIVE_INTERVAL, DEFAULT_LIVE_INTERVAL))
+            )
+
+            async def _read_live_page(_now: datetime) -> None:
+                if getattr(entry, "pref_disable_polling", False):
+                    return
+                await web.async_read_live_page()
+
+            entry.async_on_unload(
+                async_track_time_interval(hass, _read_live_page, timedelta(seconds=live_interval))
+            )
 
     # What this installation actually has, learnt from what it reports: CTC
     # answers with a clean zero for hardware and registers it does not use.

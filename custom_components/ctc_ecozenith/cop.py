@@ -1348,6 +1348,21 @@ def find_power_pair(pages: list[Any]) -> tuple[Any | None, Any | None]:
     return out, consumed
 
 
+def live_page_default(pages: list[Any]) -> int | None:
+    """The page a new set-up offers as the live page: the heat pump's, or none.
+
+    The page with the two power rows, "Driftinfo Värmepump" on an i255 and
+    "Kompressor VP1" on an i550 Pro, is the one whose values change by the
+    minute and the one the owner asked to follow live; the counters on the
+    history page move too slowly to be worth a panel that rests on them.
+    Where no page carries both powers nothing is offered.
+    """
+    out, consumed = find_power_pair(pages)
+    if out is None or consumed is None:
+        return None
+    return int(out.page)
+
+
 def find_operating_hours(pages: list[Any]) -> Any | None:
     """Pick the unit's total powered-on hours out of the harvested pages.
 

@@ -14,6 +14,8 @@ entities up every time the page is opened and hands this module one dict per pum
      "unused": [key],                   # readings this installation only ever gave as 0
      "control_enabled": bool,
      "display_interval": int | None,    # seconds between display harvests
+     "live_page": int | None,           # the page the panel rests on, read without a press
+     "live_interval": int | None,       # seconds between two reads of it
      "language": "sv" | "en"}           # Home Assistant's, which the page is built in
 
 A key is what follows "<domain>_<host>_" in the entity's unique_id: the Modbus keys in
@@ -845,6 +847,8 @@ class _Builder:
         self.text = text
         self.pages: list[Mapping[str, Any]] = list(pump.get("pages") or [])
         self.interval = pump.get("display_interval")
+        #: The live page and its pace, for the source line of its rows.
+        self.live = (pump.get("live_page"), pump.get("live_interval"))
         self.rows_of_page = {
             value.get("key"): (value, page)
             for page in self.pages for value in page.get("values") or []
@@ -873,7 +877,9 @@ class _Builder:
             found["explanation"] = (
                 explain(key, self.lang) or TEXT[self.lang]["unknown_explanation"]
             )
-        found["source"] = source(key, self.pages, self.interval, self.lang) or UNKNOWN_SOURCE
+        found["source"] = (
+            source(key, self.pages, self.interval, self.lang, live=self.live) or UNKNOWN_SOURCE
+        )
         return found
 
     def entity_id(self, key: str) -> str | None:

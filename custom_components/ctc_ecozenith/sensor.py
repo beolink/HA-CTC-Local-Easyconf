@@ -440,7 +440,7 @@ class CtcHarvestSensor(CoordinatorEntity, SensorEntity):
         reason = getattr(coordinator, "last_skip_reason", None) or getattr(
             coordinator, "last_failure", None
         )
-        return {
+        attributes: dict[str, object] = {
             "hoppade över i rad": int(getattr(coordinator, "skips_in_a_row", 0) or 0),
             "misslyckade i rad": int(getattr(patience, "failures", 0) or 0),
             "nästa försök": (
@@ -450,6 +450,28 @@ class CtcHarvestSensor(CoordinatorEntity, SensorEntity):
             "sidor lästa": list(getattr(coordinator, "pages_read", []) or []),
             "sidor missade": list(getattr(coordinator, "pages_missed", []) or []),
         }
+        live_page = getattr(coordinator, "live_page", None)
+        if live_page is not None:
+            # The live page's own account beside the walk's: when it was last
+            # read off the panel without a press, which page the panel showed
+            # at the last try and why a try read nothing, so the device page
+            # says whether the panel rests on the page and the reads go
+            # through, and the owner can set that beside what the panel's
+            # backlight does.
+            live_read = getattr(coordinator, "live_read_at", None)
+            skipped = int(getattr(coordinator, "live_skips", 0) or 0)
+            attributes.update(
+                {
+                    "direktläst sida": int(live_page),
+                    "direktläsning senast": (
+                        live_read.isoformat(timespec="seconds") if live_read is not None else None
+                    ),
+                    "direktläsning panelen visade": getattr(coordinator, "live_panel_page", None),
+                    "direktläsning uteblivna i rad": skipped,
+                    "direktläsning skäl": getattr(coordinator, "live_reason", None),
+                }
+            )
+        return attributes
 
 
 class CtcLastAlarmSensor(CoordinatorEntity, SensorEntity):

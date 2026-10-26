@@ -28,6 +28,9 @@ from .catalogue import (
     PanelBusy,
     async_discover_pages,
     async_rescan_pages,
+    live_interval_chosen,
+    live_page_among,
+    live_page_chosen,
     menu_after_rescan,
     menu_root,
     pages_from_storage,
@@ -42,6 +45,8 @@ from .const import (
     CONF_FAST_INTERVAL,
     CONF_IDENTITY,
     CONF_LANGUAGE,
+    CONF_LIVE_INTERVAL,
+    CONF_LIVE_PAGE,
     CONF_MENU,
     CONF_MENU_ROOT,
     CONF_MENU_VERSION,
@@ -55,15 +60,20 @@ from .const import (
     CONF_VISIT_SYSTEM_INFO,
     CONF_WEB_PORT,
     DEFAULT_FAST_INTERVAL,
+    DEFAULT_LIVE_INTERVAL,
     DEFAULT_MODBUS_PORT,
     DEFAULT_SLAVE,
     DEFAULT_SLOW_INTERVAL,
     DEFAULT_WEB_PORT,
     DOMAIN,
     LANG_SWEDISH,
+    LIVE_PAGE_NONE,
+    MAX_LIVE_INTERVAL,
+    MIN_LIVE_INTERVAL,
     MIN_SLOW_INTERVAL,
     has_display,
 )
+from .cop import live_page_default
 from .debug_report import debug_report_on, only_the_debug_report_changes
 from .discovery import (
     FAMILY,
@@ -126,6 +136,8 @@ FIRST_FORM_DEFAULTS: dict[str, Any] = {
     CONF_CHECK_UPDATES: True,
     CONF_SEND_STATISTICS: True,
     CONF_DEBUG_REPORT: False,
+    CONF_LIVE_PAGE: None,
+    CONF_LIVE_INTERVAL: DEFAULT_LIVE_INTERVAL,
 }
 
 CONF_PICKED = "picked"
@@ -542,7 +554,10 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             chosen = {int(page) for page in user_input.get(CONF_SLOW_PAGES, [])}
-            keep = [page for page in self._pages if page.page in chosen]
+            # The live page is harvested whatever its tick box says: the walk
+            # has to end on it, and its rows are entities only where it is read.
+            live = live_page_chosen(user_input.get(CONF_LIVE_PAGE), self._pages)
+            keep = [page for page in self._pages if page.page in chosen or page.page == live]
             options = {
                 CONF_SLOW_PAGES: pages_to_storage(keep),
                 CONF_MENU: pages_to_storage(self._pages),
@@ -551,6 +566,10 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
                 CONF_FAST_INTERVAL: DEFAULT_FAST_INTERVAL,
                 CONF_RESTORE_PAGE: user_input.get(CONF_RESTORE_PAGE, True),
+                CONF_LIVE_PAGE: live,
+                CONF_LIVE_INTERVAL: live_interval_chosen(
+                    user_input.get(CONF_LIVE_INTERVAL), DEFAULT_LIVE_INTERVAL
+                ),
                 CONF_ENABLE_CONTROL: True,
                 CONF_LANGUAGE: LANG_SWEDISH,
             }
@@ -599,12 +618,15 @@ class CtcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="slow",
             # Every page is ticked to begin with: a page nobody harvests is a
             # page whose values are missing, and switching one off afterwards
-            # is easier than discovering that something was never read.
+            # is easier than discovering that something was never read. The
+            # heat pump's page is offered as the live page, the page the
+            # panel rests on and that is read by the minute without a press.
             data_schema=_slow_schema(
                 self._pages,
                 [page.page for page in self._pages],
                 DEFAULT_SLOW_INTERVAL,
                 True,
+                live=(live_page_default(self._pages), DEFAULT_LIVE_INTERVAL),
             ),
             # The privacy page travels as a placeholder for the sentence on
             # what is switched on from the start; see async_step_user.
@@ -788,7 +810,14 @@ def _slow_schema(
     selected: list[int],
     interval: int,
     restore: bool,
+    live: tuple[int | None, int] | None = None,
 ) -> vol.Schema:
+    """The pages as tick boxes, the interval and the restore; with ``live``, the live page too.
+
+    ``live`` is the live page to offer, or None for none, and its interval:
+    the set-up's form offers them, the rescan form does not, since the first
+    form of Configure has them already.
+    """
     options = [
         selector.SelectOptionDict(value=str(page.page), label=page_label(page))
         for page in pages
@@ -814,8 +843,47 @@ def _slow_schema(
                 )
             ),
             vol.Optional(CONF_RESTORE_PAGE, default=restore): bool,
+            **(_live_fields(pages, *live) if live is not None else {}),
         }
     )
+
+
+def _live_fields(pages: list[Any], live_page: int | None, live_interval: int) -> dict[Any, Any]:
+    """The live page's select, none or one of ``pages``, and its interval, with these defaults.
+
+    The "none" option is named by the strings through the selector's
+    translation key; the pages keep the panel's own titles, which no
+    translation holds, and a translation that is not there leaves a label
+    as it is.
+    """
+    options = [
+        selector.SelectOptionDict(value=LIVE_PAGE_NONE, label=LIVE_PAGE_NONE),
+        *(
+            selector.SelectOptionDict(value=str(page.page), label=page_label(page))
+            for page in pages
+        ),
+    ]
+    chosen = live_page_among(live_page, pages)
+    return {
+        vol.Optional(
+            CONF_LIVE_PAGE, default=LIVE_PAGE_NONE if chosen is None else str(chosen)
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=options,
+                mode=selector.SelectSelectorMode.DROPDOWN,
+                translation_key=CONF_LIVE_PAGE,
+            )
+        ),
+        vol.Optional(CONF_LIVE_INTERVAL, default=live_interval): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=MIN_LIVE_INTERVAL,
+                max=MAX_LIVE_INTERVAL,
+                step=10,
+                unit_of_measurement="s",
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        ),
+    }
 
 
 class CtcOptionsFlow(config_entries.OptionsFlow):
@@ -847,13 +915,27 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
             options = self._entry.options
             menu = pages_from_storage(options.get(CONF_MENU))
             chosen = {int(page) for page in user_input.get(CONF_SLOW_PAGES, [])}
+            # The live page is harvested whatever its tick box says, as on
+            # the set-up's form. Without the menu the form offered neither
+            # the pages nor the live page, and none is written, as none
+            # could have been chosen.
+            live = live_page_chosen(user_input.get(CONF_LIVE_PAGE), menu)
             pages = (
-                {CONF_SLOW_PAGES: pages_to_storage([p for p in menu if p.page in chosen])}
+                {
+                    CONF_SLOW_PAGES: pages_to_storage(
+                        [p for p in menu if p.page in chosen or p.page == live]
+                    )
+                }
                 if menu
                 else {}
             )
             self._pending = {
                 **pages,
+                CONF_LIVE_PAGE: live,
+                CONF_LIVE_INTERVAL: live_interval_chosen(
+                    user_input.get(CONF_LIVE_INTERVAL),
+                    int(options.get(CONF_LIVE_INTERVAL, DEFAULT_LIVE_INTERVAL)),
+                ),
                 CONF_VISIT_SYSTEM_INFO: bool(user_input.get(CONF_VISIT_SYSTEM_INFO, True)),
                 CONF_CHECK_UPDATES: bool(user_input.get(CONF_CHECK_UPDATES, True)),
                 CONF_FAST_INTERVAL: int(
@@ -909,6 +991,14 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
                     ],
                     multiple=True,
                     mode=selector.SelectSelectorMode.LIST,
+                )
+            )
+            # The live page: none, or one of the menu's pages, as stored.
+            pages_field.update(
+                _live_fields(
+                    menu,
+                    live_page_among(options.get(CONF_LIVE_PAGE), menu),
+                    int(options.get(CONF_LIVE_INTERVAL, DEFAULT_LIVE_INTERVAL)),
                 )
             )
         schema = vol.Schema(
@@ -1082,9 +1172,15 @@ class CtcOptionsFlow(config_entries.OptionsFlow):
         """
         if user_input is not None:
             chosen = {int(page) for page in user_input.get(CONF_SLOW_PAGES, [])}
-            keep = [page for page in self._pages if page.page in chosen]
+            # The live page the first form chose, or the stored one, where the
+            # menu offered here still has it; harvested whatever its tick box
+            # says, as on the first form.
+            settings = {**self._entry.options, **self._pending}
+            live = live_page_among(settings.get(CONF_LIVE_PAGE), self._pages)
+            keep = [page for page in self._pages if page.page in chosen or page.page == live]
             changes = {
                 **self._pending,
+                CONF_LIVE_PAGE: live,
                 CONF_SLOW_PAGES: pages_to_storage(keep),
                 CONF_SLOW_INTERVAL: int(
                     user_input.get(CONF_SLOW_INTERVAL, DEFAULT_SLOW_INTERVAL)

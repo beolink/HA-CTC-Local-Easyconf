@@ -112,6 +112,22 @@ def install() -> bool:
             self.update_interval = update_interval
             self.data = None
             self.last_update_success = True
+            #: The listeners a test registers, told by async_update_listeners
+            #: as the real base class tells them after a refresh.
+            self._stub_listeners: list = []
+
+        def async_add_listener(self, update_callback, context=None):
+            self._stub_listeners.append(update_callback)
+
+            def _remove() -> None:
+                if update_callback in self._stub_listeners:
+                    self._stub_listeners.remove(update_callback)
+
+            return _remove
+
+        def async_update_listeners(self):
+            for listener in list(self._stub_listeners):
+                listener()
 
     class UpdateFailed(Exception):
         pass

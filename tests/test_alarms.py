@@ -703,7 +703,14 @@ def test_the_watch_is_given_the_pages_of_the_harvest_it_judges():
 
 def test_the_hook_is_one_line_in_the_harvest_loop():
     # Another track rewrites the harvest; the merge is meant to be one line.
+    # The live page's read notes its page as well, partial, since one page
+    # read between two walks is never the round that closes an episode.
     source = (pathlib.Path(__file__).resolve().parent.parent / "custom_components"
               / "ctc_ecozenith" / "coordinator.py").read_text(encoding="utf-8")
-    assert source.count("self.alarms.async_note(") == 1
+    walk = source.split("async def _async_read_page(")[1].split("\n    async def ")[0]
+    assert walk.count("self.alarms.async_note(") == 1
+    live = source.split("async def async_read_live_page(")[1].split("\n    async def ")[0]
+    assert live.count("self.alarms.async_note(") == 1
+    assert "partial=True" in live.split("self.alarms.async_note(")[1].split(")")[0]
+    assert source.count("self.alarms.async_note(") == 2
     assert source.count("AlarmWatch(") == 1

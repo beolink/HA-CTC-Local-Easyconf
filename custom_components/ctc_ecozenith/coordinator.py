@@ -217,6 +217,7 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         restore_page: bool = True,
         stored: StoredHarvest | None = None,
         config_entry: Any = None,
+        live_page: int | None = None,
     ) -> None:
         super().__init__(
             hass,
@@ -232,6 +233,25 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         #: the age a reading may reach is measured against this one.
         self.interval = interval
         self.restore_page = restore_page
+        #: The live page: the harvested page the panel rests on between two
+        #: walks. The walk reads it last and ends on it instead of putting the
+        #: panel back on the home page, and async_read_live_page reads it off
+        #: the panel without a press while the panel shows it. None, or a page
+        #: that is not harvested, leaves the panel's rest where it was.
+        self.live_page = live_page if any(p.page == live_page for p in pages) else None
+        #: The live page's own account, beside the walk's: when it was last
+        #: read without a press and how many times, when it was last tried,
+        #: how many tries in a row read nothing and why the last one did not,
+        #: the page the panel showed then, and what /vars/menu answered then,
+        #: the panel's own state as far as it reports one. The walk's
+        #: bookkeeping above is never touched by a live read.
+        self.live_read_at: datetime | None = None
+        self.live_reads = 0
+        self.live_attempt: datetime | None = None
+        self.live_skips = 0
+        self.live_reason: str | None = None
+        self.live_panel_page: int | None = None
+        self.live_menu_vars: list[Any] = []
         #: The page the panel was showing before this integration first touched
         #: it in this run, learnt the first time a harvest finds the panel
         #: outside the harvested pages. Within the run it keeps one failed
@@ -358,12 +378,13 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         Where the panel stands decides whether to walk at all; then each page
         is read in turn, a page that cannot be reached or read costing only
-        its own readings; then the panel is put back. A page that failed is
-        no failure of the harvest while another page was read: its values age
-        in the data and its sensors go unavailable by :meth:`is_fresh`. Only
-        a walk that read no page at all is raised, so that Patience counts it
-        and a display that has stopped answering is called unavailable after
-        the usual three.
+        its own readings; then the panel is put back, or left on the live
+        page, which is read last so that the walk ends there. A page that
+        failed is no failure of the harvest while another page was read: its
+        values age in the data and its sensors go unavailable by
+        :meth:`is_fresh`. Only a walk that read no page at all is raised, so
+        that Patience counts it and a display that has stopped answering is
+        called unavailable after the usual three.
         """
         data: dict[str, Any] = dict(self.data or {})
         origin = await self._async_origin()
@@ -377,7 +398,7 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         last_error: CtcWebError | None = None
         cost_before = self._cost()
         try:
-            for page in self.pages:
+            for page in self._walk_order():
                 try:
                     done = await self._async_read_page(page, data)
                 except CtcWebError as err:
@@ -496,6 +517,18 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         ):
             self.home_page = origin
 
+    def _walk_order(self) -> list[SlowPage]:
+        """The pages in the order the walk reads them: the live page last.
+
+        The walk ends on the page it read last, so with the live page there
+        the parking costs nothing: the taps that reach it are the walk's own,
+        and the restore that follows finds the panel on it already.
+        """
+        if self.live_page is None:
+            return list(self.pages)
+        rest = [page for page in self.pages if page.page != self.live_page]
+        return rest + [page for page in self.pages if page.page == self.live_page]
+
     def _restore_target(self, origin: int) -> int | None:
         """Where the panel is put back afterwards, if anywhere.
 
@@ -504,8 +537,13 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         The remembered home page breaks that loop. A round that goes ahead
         after giving way is the exception: the page the panel stands on is
         where somebody left it, and that is where it goes back, harvested page
-        or not.
+        or not. With a live page the panel rests on that page instead,
+        whatever "put the panel back" says, except after giving way: then it
+        goes back where whoever moved it left it, as without one, and the
+        next round, which finds it there, parks it again.
         """
+        if self.live_page is not None and not self._moved:
+            return self.live_page
         if not self.restore_page:
             return None
         if (
@@ -568,6 +606,91 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "Could not read where the panel is after the round; expecting page %s",
                 self._expected_page,
             )
+
+    # ------------------------------------------------------- the live page
+
+    async def async_read_live_page(self) -> bool:
+        """Read the live page off the panel while the panel shows it, without a press.
+
+        A GET of where the panel stands and one GET per screen of the page,
+        the same two requests the walk makes once it stands on a page, and
+        never a tap: nothing here can move the panel. Nothing is read while
+        the panel shows another page, because somebody is using it or no walk
+        has parked it yet; the rows keep their age until the next walk, which
+        parks the panel again. Nothing is read while a walk holds the panel
+        either: the harvest, a reading of the menu and the search for a page
+        each move it under the lock, and a read in the middle of one would be
+        of whatever page the walk stood on. The lock is looked at, not taken,
+        so a form that asks for the panel is never told it is busy over two
+        requests.
+
+        What was read goes to the listeners as after a walk: the sensors,
+        the integrators behind the estimated coefficient of performance and
+        the alarm log, whose note from here is partial (alarms.AlarmWatch).
+        The walk's own schedule and account stand: last_harvest, the pages
+        read and missed and the next attempt are the walk's, and the pace of
+        the walks is not reset by a read, which async_set_updated_data would
+        do. True when the page was read.
+        """
+        page = next((p for p in self.pages if p.page == self.live_page), None)
+        if page is None:
+            return False
+        self.live_attempt = utcnow()
+        if self.client.panel.locked():
+            self._live_read_nothing("en bläddring håller panelen")
+            return False
+        try:
+            menu = list(await self.client.async_vars("menu"))
+        except CtcWebError as err:
+            self._live_read_nothing(f"panelens läge kunde inte läsas: {err}")
+            return False
+        self.live_menu_vars = menu
+        shown = menu[0] if menu and isinstance(menu[0], int) else None
+        self.live_panel_page = shown
+        if shown != page.page:
+            self._live_read_nothing(f"panelen visar sida {shown}, inte sida {page.page}")
+            return False
+        values_by_screen: dict[int, list[Any]] = {}
+        for screen in page.screens:
+            try:
+                values_by_screen[screen] = await self.client.async_vars(screen)
+            except CtcWebError as err:
+                _LOGGER.debug("Screen %s of the live page unreadable: %s", screen, err)
+        if not values_by_screen:
+            self._live_read_nothing("ingen skärm på sidan svarade")
+            return False
+        read_at = utcnow()
+        data = dict(self.data or {})
+        for value in page.values:
+            number = numeric_value(value, values_by_screen.get(value.screen, []))
+            if number is not None:
+                data[value.key] = number
+                self.read_at[value.key] = read_at
+        # The alarm the page prints, off the same values and with no extra
+        # request; one page between two walks is never the round that closes
+        # an episode.
+        await self.alarms.async_note(self.client, page, values_by_screen, read_at, partial=True)
+        self.data = data
+        self.live_read_at = read_at
+        self.live_reads += 1
+        self.live_skips = 0
+        self.live_reason = None
+        _LOGGER.debug(
+            "Live page %s read without a press at %s; the panel reports %s",
+            page.page,
+            read_at.isoformat(timespec="seconds"),
+            menu,
+        )
+        self.async_update_listeners()
+        return True
+
+    def _live_read_nothing(self, reason: str) -> None:
+        """Note a live read that read nothing, and why, for the sensor and the diagnostics."""
+        self.live_skips += 1
+        self.live_reason = reason
+        _LOGGER.debug(
+            "Live page %s not read (%s in a row): %s", self.live_page, self.live_skips, reason
+        )
 
     async def async_restore_page(self, target: int) -> bool:
         """Put the panel back on ``target``, for callers outside the harvest.

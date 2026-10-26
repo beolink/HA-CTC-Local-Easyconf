@@ -19,6 +19,8 @@ from typing import Any
 
 from .const import (
     CHROME_BUTTON,
+    LIVE_PAGE_NONE,
+    MIN_LIVE_INTERVAL,
     PERIOD_MARKERS,
     ROW_TOLERANCE,
     SENTINELS,
@@ -1387,6 +1389,44 @@ def pages_from_storage(stored: list[dict[str, Any]] | None) -> list[SlowPage]:
         except (KeyError, TypeError, ValueError) as err:
             _LOGGER.debug("Discarding a stored page: %s", err)
     return pages
+
+
+def live_page_among(stored: Any, pages: Iterable[SlowPage]) -> int | None:
+    """The stored live page, where it is one of ``pages``, else None.
+
+    The option holds a page number, None, or nothing at all on an entry from
+    before it existed; a page that is no longer harvested, unticked or gone
+    from the menu, is no page for the panel to rest on. One rule for set-up,
+    the coordinator and the forms, so none of them parks the panel on a page
+    the others do not read.
+    """
+    if isinstance(stored, bool) or not isinstance(stored, int):
+        return None
+    return stored if any(page.page == stored for page in pages) else None
+
+
+def live_page_chosen(raw: Any, pages: Iterable[SlowPage]) -> int | None:
+    """The live page a form chose: one of ``pages``, or None for none or a page not offered.
+
+    The select hands over the page's number as text, or LIVE_PAGE_NONE; a
+    form without the select hands over nothing.
+    """
+    if raw in (None, "", LIVE_PAGE_NONE):
+        return None
+    try:
+        return live_page_among(int(raw), pages)
+    except (TypeError, ValueError):
+        return None
+
+
+def live_interval_chosen(raw: Any, fallback: int) -> int:
+    """The live interval a form chose, held to the floor, or ``fallback`` where it chose none."""
+    if raw is None:
+        return fallback
+    try:
+        return max(MIN_LIVE_INTERVAL, int(raw))
+    except (TypeError, ValueError):
+        return fallback
 
 
 def menu_is_due(stored_version: str | None, version: str, tries: int, limit: int) -> bool:

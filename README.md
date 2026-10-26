@@ -230,6 +230,41 @@ So the display is treated as a supplement, not the base:
   the backup puts the integration back together with the entity registry, the
   entries and the integration's stored files as they were.
 - They are polled on a slow interval, thirty minutes by default.
+- One page can be the **live page**, the page the panel rests on. The walk
+  reads it last and ends on it instead of going back to the home screen, and
+  the page is then read off the panel every live interval, a minute by
+  default and never under half a minute, with two small requests and never a
+  tap, for as long as the panel shows it. Its rows follow the machine by the
+  minute instead of by the half hour, and so does the estimated coefficient
+  of performance, which integrates the heat pump page's two powers. A new
+  installation is offered the heat pump's page, the one with *Avgiven värme*
+  and *Tillförd effekt*, already picked; an installation from before the
+  option keeps its panel where it was until a page is picked under Configure,
+  where *Live page* and *Live interval* stand beside the pages. Choosing a
+  page ticks it among the pages to read. The parking costs the display
+  nothing new: the taps that reach the page are the walk's own, and the
+  restore afterwards finds the panel on it already, so the only new activity
+  on the display is that the walk ends on this page rather than on the home
+  screen. A live read presses nothing, so somebody who opens another page is
+  never interrupted: the reads pause until the next walk parks the panel
+  again, after the usual two rounds given way. A live read notes the page's
+  alarm text as well, which may open or confirm an alarm episode but never
+  closes one; that stays with the walk, which reads every page that can
+  print an alarm. Whether a read lights the panel's backlight is not known.
+  The integration knows that a tap moves the panel and that a page's values
+  stay frozen until the panel shows it, and nothing in the display's web
+  interface reports the backlight: `/vars/menu`, the one state the display
+  gives, says which page is shown and a few numbers whose meaning the
+  integration does not know. So look at the panel after installing. If the
+  backlight comes on every minute with a live page picked, a read wakes it,
+  and a longer live interval or no live page under Configure is the remedy;
+  if it wakes only every half hour, that is the walk, which taps the panel
+  as it always did. Set what you see beside the sensor *Last display
+  harvest*, whose attributes say when the live page was last read and which
+  page the panel showed, and beside the diagnostics download, whose
+  `display.live` section carries the moment of the last read, the number of
+  reads and what `/vars/menu` answered; with the integration's debug log on,
+  every read is one line with the panel's answer.
 - A restart of Home Assistant costs the panel nothing. The last harvest is
   kept, values and the moment each was read, so the sensors come up with it,
   and the next harvest is made when it would have been made anyway, one
@@ -254,7 +289,9 @@ So the display is treated as a supplement, not the base:
   displayskörd*) says when the display was last read, and in its attributes
   how many harvests in a row were skipped
   or failed, when the next attempt is, the reason for the last empty one, and
-  which pages were read and missed. The CTC page names a pump that Home
+  which pages were read and missed; with a live page, also when that page
+  was last read without a press, which page the panel showed at the last try
+  and why a try read nothing. The CTC page names a pump that Home
   Assistant is retrying, with the reason, instead of saying that nothing runs.
 - Reading the menu again from Configure takes the same turn at the panel as
   the harvest and the walk to the system information page, so two of them can
@@ -321,6 +358,9 @@ every form of them, on both models tested.
    display rows' entities; see [Language](#language). Everything is ticked to
    begin with; switch off what you do not want. For the coefficient of
    performance, keep the page with the stored or historical operation data.
+   The heat pump's page is offered as the live page, the page the panel rests
+   on and that is read by the minute without a press; see [The catch with the
+   display](#the-catch-with-the-display-and-what-the-integration-does-about-it).
 
 **When Modbus does not answer.** If the display answers and Modbus does not, a
 step of its own says where on the panel Modbus TCP is turned on, and takes the
@@ -438,6 +478,8 @@ that changed: that one is applied without a reload.
 | Pages to read | every page of the menu | Which display pages are harvested. The figure after each page is how many values it holds. Shown once the menu has been read. |
 | Modbus interval | 30 s, from 10 to 600 | How often the Modbus registers are read. |
 | Display interval | 1800 s, from 300 to 21600 | How often the ticked pages are harvested; every harvest walks the physical panel, which is why it is slow. |
+| Live page | none; a new installation is offered the heat pump's page | The page the panel rests on after every walk, read every live interval without a press for as long as the panel shows it. Choosing a page ticks it among the pages to read. Shown once the menu has been read; see [The catch with the display](https://github.com/beolink/HA-CTC-Local-Easyconf#the-catch-with-the-display-and-what-the-integration-does-about-it). |
+| Live interval | 60 s, from 30 to 3600 | How often the live page is read while the panel shows it. Two small requests per read, never a tap. |
 | Put the panel back afterwards | on | Returns the panel to the page it was found on after a harvest. |
 | Allow controlling the heat pump | on | Creates the controls, which write only to the volatile 1000 block; see [Control](https://github.com/beolink/HA-CTC-Local-Easyconf#control). |
 | Let the integration open System information on the panel | on | The one walk to the page with the serial number and the display's software version; see [Setup](https://github.com/beolink/HA-CTC-Local-Easyconf#setup). |

@@ -47,7 +47,13 @@
         "data": {
           "slow_pages": "Pages to read",
           "slow_interval": "How often",
-          "restore_page": "Put the panel back afterwards"
+          "restore_page": "Put the panel back afterwards",
+          "live_page": "Live page",
+          "live_interval": "Live interval"
+        },
+        "data_description": {
+          "live_page": "The page the panel rests on between two walks. The walk ends on it instead of on the home screen, and it is read every live interval without a single press for as long as the panel shows it, so its rows follow the heat pump by the minute instead of by the half hour. Each read is two small requests to the display's web server and moves nothing; the only new movement is the walk ending on this page. The heat pump's page with the delivered heat and the supplied power is suggested. Choosing a page ticks it among the pages to read. Whether a read lights the panel's backlight is not known yet; the README says what to look for.",
+          "live_interval": "How often the live page is read while the panel shows it, in seconds, from 30 to 3600. A read costs the display two small requests and moves nothing."
         }
       },
       "confirm": {
@@ -75,6 +81,11 @@
       "options": {
         "manual": "Enter an address"
       }
+    },
+    "live_page": {
+      "options": {
+        "none": "No live page"
+      }
     }
   },
   "options": {
@@ -92,7 +103,9 @@
           "slow_pages": "Pages to read",
           "visit_system_info": "Let the integration open System information on the panel",
           "check_updates": "Tell me when a new version is released",
-          "find_page": "Search for the way to a page"
+          "find_page": "Search for the way to a page",
+          "live_page": "Live page",
+          "live_interval": "Live interval"
         },
         "data_description": {
           "enable_control": "Creates control entities that write to CTC's volatile 1000 registers. The controller forgets them about five minutes after the last write, so control releases itself if Home Assistant stops. The stored settings in the 61500 block are never written.",
@@ -101,7 +114,9 @@
           "visit_system_info": "The panel walks to the display's System information page once and back, to read the serial number and the display's own software version. It presses nothing but Advanced, Display and System information, checks where the panel went after every press, and gives up at the first surprise.",
           "check_updates": "Asks GitHub once a day whether a newer release of this integration exists, and says so in the repairs view. Home Assistant only offers updates for what HACS installed, so a copy put in place by hand is otherwise never offered one.",
           "slow_pages": "The figure after each page is how many values it holds.",
-          "find_page": "For a page of the display that the reading of the menu does not reach, such as Kompressor VP1 on an i550 Pro. The next form asks for the page's number, and the search moves the panel, so somebody should stand at the panel."
+          "find_page": "For a page of the display that the reading of the menu does not reach, such as Kompressor VP1 on an i550 Pro. The next form asks for the page's number, and the search moves the panel, so somebody should stand at the panel.",
+          "live_page": "The page the panel rests on between two walks, read every live interval without a press for as long as the panel shows it; none leaves the panel where the walk found it. Choosing a page ticks it among the pages to read. Shown once the menu has been read.",
+          "live_interval": "How often the live page is read while the panel shows it, in seconds, from 30 to 3600. Each read is two small requests to the display and moves nothing."
         }
       },
       "rescan": {

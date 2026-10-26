@@ -47,7 +47,13 @@
         "data": {
           "slow_pages": "Sidor att hämta",
           "slow_interval": "Hur ofta",
-          "restore_page": "Ställ tillbaka panelen efteråt"
+          "restore_page": "Ställ tillbaka panelen efteråt",
+          "live_page": "Direktläst sida",
+          "live_interval": "Direktintervall"
+        },
+        "data_description": {
+          "live_page": "Sidan panelen vilar på mellan två bläddringar. Bläddringen slutar på den i stället för på hemskärmen, och den läses varje direktintervall utan ett enda tryck så länge panelen visar den, så dess rader följer värmepumpen minut för minut i stället för var halvtimme. Varje läsning är två små anrop till displayens webbserver och flyttar ingenting; det enda nya som rör panelen är att bläddringen slutar på den här sidan. Värmepumpens sida med avgiven värme och tillförd effekt föreslås. Väljer du en sida kryssas den också bland sidorna att hämta. Om en läsning tänder panelens bakgrundsbelysning är inte känt ännu; README säger vad du ska titta efter.",
+          "live_interval": "Hur ofta den direktlästa sidan läses medan panelen visar den, i sekunder, från 30 till 3600. En läsning kostar displayen två små anrop och flyttar ingenting."
         }
       },
       "confirm": {
@@ -75,6 +81,11 @@
       "options": {
         "manual": "Ange adress"
       }
+    },
+    "live_page": {
+      "options": {
+        "none": "Ingen direktläst sida"
+      }
     }
   },
   "options": {
@@ -92,7 +103,9 @@
           "slow_pages": "Sidor att hämta",
           "visit_system_info": "Låt integrationen öppna Systeminformation på panelen",
           "check_updates": "Säg till när en ny version släpps",
-          "find_page": "Sök väg till en sida"
+          "find_page": "Sök väg till en sida",
+          "live_page": "Direktläst sida",
+          "live_interval": "Direktintervall"
         },
         "data_description": {
           "enable_control": "Skapar styrentiteter som skriver till CTC:s flyktiga 1000-register. De nollställs av pumpen cirka fem minuter efter sista skrivningen, så styrningen släpper av sig själv om Home Assistant stannar. De lagrade inställningarna i 61500-serien rörs aldrig.",
@@ -101,7 +114,9 @@
           "visit_system_info": "Panelen går till displayens sida Systeminformation en gång och tillbaka igen, för att läsa serienummer och displayens egen programversion. Den trycker bara på Avancerat, Display och Systeminformation, kontrollerar var panelen hamnade efter varje tryck och avbryter vid minsta avvikelse.",
           "check_updates": "Frågar GitHub en gång om dygnet om det finns en nyare release av integrationen, och säger till i reparationsvyn. Home Assistant erbjuder bara uppdateringar för det HACS installerat, så en kopia som lagts dit för hand får annars aldrig någon.",
           "slow_pages": "Talet efter varje sida är hur många värden den har.",
-          "find_page": "För en sida på displayen som menyläsningen inte når, till exempel Kompressor VP1 på en i550 Pro. Nästa formulär frågar efter sidans nummer, och sökningen flyttar panelen, så någon bör stå vid panelen."
+          "find_page": "För en sida på displayen som menyläsningen inte når, till exempel Kompressor VP1 på en i550 Pro. Nästa formulär frågar efter sidans nummer, och sökningen flyttar panelen, så någon bör stå vid panelen.",
+          "live_page": "Sidan panelen vilar på mellan två bläddringar, läst varje direktintervall utan tryck så länge panelen visar den; ingen lämnar panelen där bläddringen fann den. Väljer du en sida kryssas den också bland sidorna att hämta. Visas när menyn har lästs.",
+          "live_interval": "Hur ofta den direktlästa sidan läses medan panelen visar den, i sekunder, från 30 till 3600. Varje läsning är två små anrop till displayen och flyttar ingenting."
         }
       },
       "rescan": {

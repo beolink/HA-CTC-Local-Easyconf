@@ -36,7 +36,13 @@ from homeassistant.helpers.json import json_bytes, json_fragment
 
 from . import dashboard_views as views
 from .card import async_register_card
-from .const import CONF_SLOW_INTERVAL, DEFAULT_SLOW_INTERVAL, DOMAIN
+from .const import (
+    CONF_LIVE_INTERVAL,
+    CONF_SLOW_INTERVAL,
+    DEFAULT_LIVE_INTERVAL,
+    DEFAULT_SLOW_INTERVAL,
+    DOMAIN,
+)
 from .keys import prefix_of
 
 _LOGGER = logging.getLogger(__name__)
@@ -104,6 +110,7 @@ def _collect(hass: HomeAssistant, entry_id: str | None = None) -> list[dict[str,
             # apart where the name cannot.
             "pages": [
                 {"title": page.title,
+                 "page": page.page,
                  "values": [
                      {"key": v.key, "label": v.label, "unit": v.unit,
                       "screen": v.screen, "row": place}
@@ -122,6 +129,13 @@ def _collect(hass: HomeAssistant, entry_id: str | None = None) -> list[dict[str,
             "display_interval": (
                 int(entry.options.get(CONF_SLOW_INTERVAL, DEFAULT_SLOW_INTERVAL))
                 if runtime.web is not None else None
+            ),
+            # The page the panel rests on and how often it is read without a
+            # press, for the source line of its rows; None without one.
+            "live_page": getattr(runtime.web, "live_page", None),
+            "live_interval": (
+                int(entry.options.get(CONF_LIVE_INTERVAL, DEFAULT_LIVE_INTERVAL))
+                if getattr(runtime.web, "live_page", None) is not None else None
             ),
             # Home Assistant's language, as the integration's own entity names
             # have it through their translations (roadmap R23). The panel's

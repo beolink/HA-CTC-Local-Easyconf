@@ -161,9 +161,13 @@ def test_no_label_in_the_flow_is_written_in_one_language():
     # behind every page in the tick boxes.
     assert "Ange" not in FLOW and "värden" not in FLOW
     assert "translation_key=CONF_PICKED" in FLOW
-    assert FLOW.count("label=page_label(page)") == 2, (
-        "båda kryssrutelistorna använder samma etikett"
+    # The two tick box lists and the live page's select name the pages alike;
+    # the select's "none" is named by the strings through its translation key.
+    assert FLOW.count("label=page_label(page)") == 3, (
+        "kryssrutelistorna och valet av direktläst sida använder samma etikett"
     )
+    assert "translation_key=CONF_LIVE_PAGE" in FLOW
+    assert "label=LIVE_PAGE_NONE" in FLOW
     assert 'return f"{page.title} ({len(page.values)})"' in FLOW
 
 

@@ -293,6 +293,24 @@ def display_section(runtime: Any) -> dict[str, Any] | None:
         "read_at": dict(getattr(web, "read_at", None) or {}),
         "values": dict(getattr(web, "data", None) or {}),
     }
+    # The live page's reads, which press nothing: when the last one was and
+    # how many there have been, what the panel showed at the last try and
+    # what /vars/menu answered then, the panel's own state as far as it
+    # reports one, so a read's moment can be set beside the backlight.
+    found["live"] = (
+        {
+            "page": web.live_page,
+            "reads": getattr(web, "live_reads", None),
+            "last_read": getattr(web, "live_read_at", None),
+            "last_attempt": getattr(web, "live_attempt", None),
+            "skips_in_a_row": getattr(web, "live_skips", None),
+            "last_reason": getattr(web, "live_reason", None),
+            "panel_page": getattr(web, "live_panel_page", None),
+            "menu_vars": list(getattr(web, "live_menu_vars", None) or []),
+        }
+        if getattr(web, "live_page", None) is not None
+        else None
+    )
     return found
 
 

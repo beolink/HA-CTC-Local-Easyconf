@@ -1025,13 +1025,19 @@ HARVEST: dict[str, Text] = {
         f"{_SKIPS} i rad, och försöker om efter fem minuter när displayen inte svarar. Attributen "
         "säger hur många varv i rad "
         "som hoppats över eller misslyckats, när nästa försök görs, vilket skälet var och "
-        "vilka sidor som lästes och missades senast.",
+        "vilka sidor som lästes och missades senast. Med en direktläst sida vilar panelen på "
+        "den efter varje varv och sidan läses utan tryck så länge panelen visar den; "
+        "attributen säger då när den senast lästes, vilken sida panelen visade och varför en "
+        "läsning uteblev.",
         "When the display's pages were last read. The integration walks to the chosen pages "
         f"every {_HARVEST_MINUTES_EN} by default, skips the round while somebody is at the "
         f"panel, at most {_SKIPS_EN} in a row, and tries again after five minutes when the "
         "display does not answer. The attributes say how many rounds in a row have been skipped "
         "or have failed, when the next try is made, what the reason was and which pages were "
-        "read and missed last.",
+        "read and missed last. With a live page the panel rests on it after every walk and "
+        "the page is read without a press for as long as the panel shows it; the attributes "
+        "then say when it was last read, which page the panel showed and why a read gave "
+        "nothing.",
     ),
 }
 
@@ -1624,9 +1630,17 @@ def _register_source(key: str) -> Text | None:
 
 
 def _page_source(
-    key: str, pages: list[Mapping[str, Any]] | None, interval: int | None
+    key: str,
+    pages: list[Mapping[str, Any]] | None,
+    interval: int | None,
+    live: tuple[Any, Any] | None = None,
 ) -> Text | None:
-    """Where a display row comes from: its page, screen, place and how often it is read."""
+    """Where a display row comes from: its page, screen, place and how often it is read.
+
+    ``live`` is the live page's number and its interval in seconds, where
+    there is one: a row on that page is read without a press as often as
+    that while the panel shows the page, and by the walk otherwise.
+    """
     for page in pages or []:
         for value in page.get("values") or []:
             if value.get("key") != key:
@@ -1643,6 +1657,17 @@ def _page_source(
             minutes = max(1, round(interval / 60)) if interval else None
             every_sv = f", hämtas var {minutes}:e minut" if minutes else ""
             every_en = f", read every {minutes} minutes" if minutes else ""
+            live_page, live_seconds = live or (None, None)
+            if live_page is not None and page.get("page") == live_page and live_seconds:
+                seconds = int(live_seconds)
+                every_sv = (
+                    f", direktläst var {seconds}:e sekund medan panelen visar sidan"
+                    + (f", annars var {minutes}:e minut" if minutes else "")
+                )
+                every_en = (
+                    f", read live every {seconds} seconds while the panel shows it"
+                    + (f", else every {minutes} minutes" if minutes else "")
+                )
             title = page.get("title")
             return Text(
                 f"Displaysidan {title}{where_sv}{every_sv}",
@@ -1656,8 +1681,13 @@ def source(
     pages: list[Mapping[str, Any]] | None = None,
     interval: int | None = None,
     lang: str | None = SWEDISH,
+    live: tuple[Any, Any] | None = None,
 ) -> str | None:
-    """Where a value comes from, in a few words, in the page's language."""
+    """Where a value comes from, in a few words, in the page's language.
+
+    ``live`` names the live page and its interval in seconds, for the rows
+    that are read without a press while the panel rests on their page.
+    """
     found: str | None = _register_source(key)
     if found is None:
         found = _SOURCES.get(key)
@@ -1670,5 +1700,5 @@ def source(
     if found is None and key in HARVEST:
         found = _HARVEST_SOURCE
     if found is None:
-        found = _page_source(key, pages, interval)
+        found = _page_source(key, pages, interval, live)
     return None if found is None else in_language(found, lang)
