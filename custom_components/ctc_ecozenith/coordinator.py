@@ -252,6 +252,11 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.live_reason: str | None = None
         self.live_panel_page: int | None = None
         self.live_menu_vars: list[Any] = []
+        #: Told when a live read read nothing. The coordinator's own listeners
+        #: are not: the data has not changed, and the integrators behind them
+        #: must not meet the same reading twice. The harvest sensor listens
+        #: here, so its account of the live reads follows the tries.
+        self._live_status_listeners: list[Callable[[], None]] = []
         #: The page the panel was showing before this integration first touched
         #: it in this run, learnt the first time a harvest finds the panel
         #: outside the harvested pages. Within the run it keeps one failed
@@ -684,6 +689,20 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.async_update_listeners()
         return True
 
+    @callback
+    def async_add_live_status_listener(
+        self, update_callback: Callable[[], None]
+    ) -> Callable[[], None]:
+        """Be told when a live read read nothing; returns the call that stops it."""
+        self._live_status_listeners.append(update_callback)
+
+        @callback
+        def remove() -> None:
+            if update_callback in self._live_status_listeners:
+                self._live_status_listeners.remove(update_callback)
+
+        return remove
+
     def _live_read_nothing(self, reason: str) -> None:
         """Note a live read that read nothing, and why, for the sensor and the diagnostics."""
         self.live_skips += 1
@@ -691,6 +710,8 @@ class CtcWebCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         _LOGGER.debug(
             "Live page %s not read (%s in a row): %s", self.live_page, self.live_skips, reason
         )
+        for update_callback in list(self._live_status_listeners):
+            update_callback()
 
     async def async_restore_page(self, target: int) -> bool:
         """Put the panel back on ``target``, for callers outside the harvest.

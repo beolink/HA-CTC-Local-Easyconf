@@ -3,6 +3,20 @@
 The notes of a release are its tag's message, as the README says under
 Releases. This file collects what is on its way into the next release.
 
+## 0.29.1 (2026-10-28)
+
+### Fixed
+
+- The sensor *Last display harvest* now follows a live read that read
+  nothing. Such a try leaves the data alone and so told the coordinator's
+  listeners nothing, and the sensor kept the account of the last read that
+  went through: on VSH, with the panel on the home screen after the live page
+  was picked, it said no try had failed and gave no reason, while the
+  diagnostics counted nine skips because the panel showed page 0. The
+  coordinator now tells a channel of its own about such a try, and the sensor
+  listens there; the integrators behind the coordinator's listeners still
+  never meet the same reading twice.
+
 ## 0.29.0 (2026-10-26)
 
 ### Added

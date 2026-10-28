@@ -418,6 +418,14 @@ class CtcHarvestSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = unique_id(runtime.device, "display_harvest")
         self._attr_device_info = runtime.device
 
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        # A live read that reads nothing leaves the data, and so the
+        # coordinator's listeners, alone; the attributes below still change.
+        add = getattr(self.coordinator, "async_add_live_status_listener", None)
+        if add is not None:
+            self.async_on_remove(add(self.async_write_ha_state))
+
     @property
     def native_value(self):
         return getattr(self.coordinator, "last_harvest", None)

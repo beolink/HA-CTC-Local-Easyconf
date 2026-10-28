@@ -261,6 +261,8 @@ def test_nothing_is_read_while_the_panel_shows_another_page(house, clock):
     async def scenario():
         await walk()
         web.async_add_listener(lambda: heard.append(1))
+        told: list[str | None] = []
+        stop = web.async_add_live_status_listener(lambda: told.append(web.live_reason))
         panel.page = HISTORY  # somebody opened the history page
         panel.values[220] = [50, 13]
         clock(60)
@@ -274,10 +276,17 @@ def test_nothing_is_read_while_the_panel_shows_another_page(house, clock):
         assert web.live_skips == 1 and web.live_panel_page == HISTORY
         assert web.live_reason == f"panelen visar sida {HISTORY}, inte sida {HEAT_PUMP}"
         assert web.live_read_at is None
+        # The sensor's own channel hears of the try, with its reason.
+        assert told == [f"panelen visar sida {HISTORY}, inte sida {HEAT_PUMP}"]
         # Back on the page, the next read goes through and the count starts over.
         panel.page = HEAT_PUMP
         assert await web.async_read_live_page() is True
         assert web.live_skips == 0 and web.live_reason is None and heard == [1]
+        assert len(told) == 1, "en läsning som går igenom hörs genom de vanliga lyssnarna"
+        stop()
+        panel.page = HISTORY
+        assert await web.async_read_live_page() is False
+        assert len(told) == 1, "den som slutat lyssna hör inget mer"
 
     run(scenario())
 
@@ -503,6 +512,16 @@ def test_the_harvest_sensor_says_how_the_live_reads_go():
     web.live_page = None
     attributes = sensor.CtcHarvestSensor(runtime).extra_state_attributes
     assert not [name for name in attributes if name.startswith("direkt")]
+
+
+def test_the_harvest_sensor_follows_a_live_read_that_read_nothing():
+    # A try that reads nothing tells the coordinator's listeners nothing, so
+    # the sensor listens on the live status channel, or its attributes keep
+    # the account of the last read that went through.
+    source = (COMPONENT / "sensor.py").read_text(encoding="utf-8")
+    body = source[source.index("class CtcHarvestSensor") : source.index("class CtcLastAlarmSensor")]
+    assert "async_add_live_status_listener" in body
+    assert "self.async_on_remove(add(self.async_write_ha_state))" in body
 
 
 def test_the_diagnostics_carry_the_reads_beside_what_the_panel_answered():
