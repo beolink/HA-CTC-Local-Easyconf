@@ -3,6 +3,21 @@
 The notes of a release are its tag's message, as the README says under
 Releases. This file collects what is on its way into the next release.
 
+## 0.30.0 (2026-11-13)
+
+### Added
+
+- **The coefficient of performance over the last day** on the performance
+  tab, under the compressor's day: a line over 24 hours, as the graphs above
+  it. On a heat pump whose energy counters give a coefficient of performance
+  it is the pump's own figure for the last day; on one whose counters give
+  none, an EcoAir 600M among them, it is the integration's estimate of the
+  day in its place, under the estimate's own name, so the line says what it
+  is. Never both: a pump that reports a figure is not drawn a second, rougher
+  line beside it. Which of the two is read off the states as the page is
+  built: any span of the counters' figure with a number makes it the pump's
+  own.
+
 ## 0.29.1 (2026-10-28)
 
 ### Fixed

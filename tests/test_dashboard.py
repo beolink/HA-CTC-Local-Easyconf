@@ -3,6 +3,8 @@
 import json
 import re
 
+import pytest
+
 from conftest import COMPONENT, load
 
 NEW_HA = (2026, 9)
@@ -362,6 +364,7 @@ def test_performance_opens_with_the_graphs_and_then_every_reading(dashboard_view
     assert _headings(sections) == [
         "Framledning och börvärde det senaste dygnet",
         "Kompressorn det senaste dygnet",
+        "Värmefaktor det senaste dygnet",
         "Energi per dygn",
         "Kompressorns gångtid per dygn",
         "Värmefaktor per dygn",
@@ -372,7 +375,7 @@ def test_performance_opens_with_the_graphs_and_then_every_reading(dashboard_view
         "Pumpens inställningar",
         "Om enheten",
     ]
-    assert all(s.get("column_span") == 2 for s in sections[:5])
+    assert all(s.get("column_span") == 2 for s in sections[:6])
     energy = _section(sections, "Energi per dygn")["cards"][1]
     assert energy["type"] == "statistics-graph"
     assert energy["chart_type"] == "bar" and energy["stat_types"] == ["change"]
@@ -386,6 +389,69 @@ def test_performance_opens_with_the_graphs_and_then_every_reading(dashboard_view
     cop = _section(sections, "Värmefaktor per dygn")["cards"][1]
     assert cop["chart_type"] == "bar" and cop["stat_types"] == ["mean"]
     assert cop["entities"] == [pump["entities"]["cop_day"]]
+
+
+COP_TODAY = "Värmefaktor det senaste dygnet"
+
+
+def _with_estimate(pump: dict, reported: bool) -> dict:
+    pump = {**pump, "cop_reported": reported}
+    pump["entities"] = {
+        **pump["entities"],
+        "cop_estimate_day": "sensor.ctc_ecozenith_i255_uppskattad_dygnsvarmefaktor",
+    }
+    return pump
+
+
+def test_the_days_cop_follows_the_compressor_as_the_pumps_own_figure(dashboard_views, pumps):
+    """A pump that reports a coefficient of performance is drawn its own, and only that."""
+    pump = _with_estimate(pumps["vsh"], reported=True)
+    sections = _tab(dashboard_views, pump, "performance")
+    headings = _headings(sections)
+    assert headings.index(COP_TODAY) == headings.index("Kompressorn det senaste dygnet") + 1
+    graph = _section(sections, COP_TODAY)["cards"][1]
+    assert graph["type"] == "history-graph" and graph["hours_to_show"] == 24
+    assert [e["entity"] if isinstance(e, dict) else e for e in graph["entities"]] == [
+        pump["entities"]["cop_day"]
+    ]
+
+
+def test_the_days_cop_is_the_estimate_where_the_pump_reports_none(dashboard_views, pumps):
+    pump = _with_estimate(pumps["vsh"], reported=False)
+    graph = _section(_tab(dashboard_views, pump, "performance"), COP_TODAY)["cards"][1]
+    entity = "sensor.ctc_ecozenith_i255_uppskattad_dygnsvarmefaktor"
+    assert [e["entity"] if isinstance(e, dict) else e for e in graph["entities"]] == [entity]
+    # Hidden only while unavailable, as every coefficient of performance:
+    # unknown is a figure with a reason (skäl), and its day is still drawn.
+    assert graph["visibility"] == [
+        {"condition": "state", "entity": entity, "state_not": ["unavailable"]}
+    ]
+    # Without the estimate either, there is no figure to draw and no graph.
+    del pump["entities"]["cop_estimate_day"]
+    assert COP_TODAY not in _headings(_tab(dashboard_views, pump, "performance"))
+
+
+def test_a_description_from_before_the_word_keeps_the_pumps_own_figure(dashboard_views, pumps):
+    pump = {**pumps["vsh"]}
+    pump.pop("cop_reported", None)
+    graph = _section(_tab(dashboard_views, pump, "performance"), COP_TODAY)["cards"][1]
+    assert [e["entity"] if isinstance(e, dict) else e for e in graph["entities"]] == [
+        pump["entities"]["cop_day"]
+    ]
+
+
+@pytest.mark.parametrize(
+    ("states", "reported"),
+    [
+        ({}, False),
+        ({"cop_day": "unknown", "cop_lifetime": "unavailable"}, False),
+        ({"cop_day": None}, False),
+        ({"cop_day": "unknown", "cop_lifetime": "3.12"}, True),
+        ({"cop_day": "2.7"}, True),
+    ],
+)
+def test_a_pump_reports_a_cop_when_any_span_reads_a_number(dashboard_views, states, reported):
+    assert dashboard_views.reports_cop(states) is reported
 
 
 def test_the_compressors_running_time_per_day_is_a_bar_per_day_and_goes_where_it_is_zero(

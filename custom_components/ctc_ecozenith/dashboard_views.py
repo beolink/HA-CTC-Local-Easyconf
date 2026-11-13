@@ -299,6 +299,10 @@ _GRAPHS = (
     # with the outdoor temperature the setpoint is worked out from.
     ("graph_flow", "history", ("hs1_flow", "hs1_flow_setpoint", "outdoor_temp")),
     ("graph_compressor", "history", ("hp1_rps", "degree_minutes")),
+    # The day's coefficient of performance as it moved through the day: the
+    # pump's own figure where it reports one, else the estimate in its place
+    # (_GRAPH_STAND_INS).
+    ("graph_cop_today", "history", ("cop_day",)),
     ("graph_energy", "change", (ENERGY_OUT, "compressor_kwh", "immersion_kwh")),
     # 62214 only grows, so its change per day is the hours the compressor ran.
     ("graph_runtime", "change", ("compressor_hours",)),
@@ -310,8 +314,20 @@ _GRAPHS = (
 #: show, so the tab adds something rather than opening with the same picture.
 _OVERVIEW_GRAPHS = ("graph_temps", "graph_pump")
 _PERFORMANCE_GRAPHS = (
-    "graph_flow", "graph_compressor", "graph_energy", "graph_runtime", "graph_cop"
+    "graph_flow", "graph_compressor", "graph_cop_today", "graph_energy", "graph_runtime",
+    "graph_cop",
 )
+#: The coefficients of performance the heat pump's own energy counters give,
+#: every span of them: one that reads a number says the pump reports one.
+REPORTED_COP = (
+    "cop_day", "cop_week", "cop_month", "cop_year", "cop_first_year", "cop_lifetime",
+)
+#: What a graph draws in place of its keys on a pump that reports no
+#: coefficient of performance: the integration's rough estimate of the same
+#: day (cop_estimate.py), which says on its own name that it is an estimate.
+#: Never both, so a pump that reports a figure is not drawn a second, rougher
+#: line beside it.
+_GRAPH_STAND_INS = {"graph_cop_today": ("cop_estimate_day",)}
 #: The line a graph's heading promises, where it has one: without it, because
 #: the installation lacks the entity or has only ever read it as zero, the
 #: graph is left out rather than drawn under a heading that promises more. The
@@ -326,6 +342,23 @@ _GRAPH_ICONS = {"graph_pump": "mdi:chart-timeline", "history": "mdi:chart-line"}
 
 def _graph(graph_id: str) -> tuple[str, str, tuple[str, ...]]:
     return next(graph for graph in _GRAPHS if graph[0] == graph_id)
+
+
+def reports_cop(states: Mapping[str, Any]) -> bool:
+    """Whether any of the counters' coefficients of performance reads a number now.
+
+    ``states`` maps a key of REPORTED_COP to its entity's state. A pump whose
+    counters read zero has every one of them unknown, all the time; a pump that
+    reports one has the lifetime's figure at least, also on a day too short
+    for the day's.
+    """
+    for key in REPORTED_COP:
+        try:
+            float(states.get(key))
+        except (TypeError, ValueError):
+            continue
+        return True
+    return False
 
 
 def _graph_icon(graph_id: str, kind: str) -> str:
@@ -391,6 +424,7 @@ TEXT = {
         "graph_pump": "Pumpen det senaste dygnet",
         "graph_flow": "Framledning och börvärde det senaste dygnet",
         "graph_compressor": "Kompressorn det senaste dygnet",
+        "graph_cop_today": "Värmefaktor det senaste dygnet",
         "graph_energy": "Energi per dygn",
         "graph_runtime": "Kompressorns gångtid per dygn",
         "graph_cop": "Värmefaktor per dygn",
@@ -504,6 +538,7 @@ TEXT = {
         "graph_pump": "The pump over the last day",
         "graph_flow": "Flow and setpoint over the last day",
         "graph_compressor": "The compressor over the last day",
+        "graph_cop_today": "COP over the last day",
         "graph_energy": "Energy per day",
         "graph_runtime": "Compressor running time per day",
         "graph_cop": "COP per day",
@@ -849,6 +884,10 @@ class _Builder:
         self.interval = pump.get("display_interval")
         #: The live page and its pace, for the source line of its rows.
         self.live = (pump.get("live_page"), pump.get("live_interval"))
+        #: Whether the pump reports a coefficient of performance of its own
+        #: (reports_cop); a description without the word is one from before
+        #: it, and keeps the pump's own figure.
+        self.cop_reported = bool(pump.get("cop_reported", True))
         self.rows_of_page = {
             value.get("key"): (value, page)
             for page in self.pages for value in page.get("values") or []
@@ -1156,6 +1195,8 @@ def _graph_section(
 ) -> dict[str, Any] | None:
     """One graph under its heading, two columns wide, or None without entities."""
     _id, kind, keys = _graph(graph_id)
+    if graph_id in _GRAPH_STAND_INS and not build.cop_reported:
+        keys = _GRAPH_STAND_INS[graph_id]
     return _section(_heading(text[graph_id], _graph_icon(graph_id, kind)),
                     [build.graph(graph_id, kind, keys)], column_span=2)
 

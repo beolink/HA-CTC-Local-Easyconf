@@ -122,6 +122,15 @@ def _collect(hass: HomeAssistant, entry_id: str | None = None) -> list[dict[str,
             "energy_in": getattr(runtime.energy_in, "key", None),
             "unused": sorted(unused),
             "control_enabled": bool(runtime.control_enabled),
+            # Whether the pump's own counters give a coefficient of
+            # performance, read off the states as the page is built: the
+            # graph of the day draws the estimate in its place where not.
+            "cop_reported": views.reports_cop({
+                key: state.state
+                for key in views.REPORTED_COP
+                if (entity_id := entities.get(key))
+                and (state := hass.states.get(entity_id)) is not None
+            }),
             # The configured interval, not the coordinator's own, which is
             # five minutes while the display is being retried and shorter
             # still before the first harvest after a start: the source line

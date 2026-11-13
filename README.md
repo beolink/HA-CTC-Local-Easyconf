@@ -564,12 +564,16 @@ it is never out of date. Each heat pump gets four tabs.
   (*Felsökning*), is a tick box, **Report all values to the developer**
   (*Rapportera alla värden till utvecklaren*), there whether control is on or
   off; see [Debug report](#debug-report).
-- **Performance.** How the pump has run: the flow against its setpoint and the
-  compressor over a day, energy, the compressor's running time and the
+- **Performance.** How the pump has run: the flow against its setpoint, the
+  compressor and the coefficient of performance over a day, energy, the
+  compressor's running time and the
   coefficient of performance per day over a month, a bar per day, and then
   every reading in its own section, temperatures, hot water, energy, the
   refrigerant circuit, the settings stored in the heat pump and what the unit
   says about itself.
+  The day's coefficient of performance is the pump's own figure where its
+  energy counters give one, and the integration's estimate in its place where
+  they do not, never both.
 - **All values.** The full list with a search field over it, every value the
   installation offers, the display's own pages among them under the names the
   panel prints. Nothing is left out here whatever it reads, which makes it the
