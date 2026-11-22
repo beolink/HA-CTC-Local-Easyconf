@@ -3,6 +3,32 @@
 The notes of a release are its tag's message, as the README says under
 Releases. This file collects what is on its way into the next release.
 
+## 0.31.0 (2026-11-22)
+
+### Added
+
+- **The outdoor temperature beside the coefficient of performance**, in the
+  same chart on an axis of its own: the coefficient on the left, °C on the
+  right. On an air to water heat pump the one follows the other closely, and
+  the two are now read off one picture. Both charts of the coefficient of
+  performance on the performance tab have it: *COP over the last day* draws
+  the two as lines over 24 hours, and *COP per day* a bar a day over a month
+  with the day's mean outdoor temperature as a line over the bars. Holding
+  the pointer over a chart, or touching it, shows the moment's or the day's
+  figures together.
+- The charts are the integration's own card, custom:ctc-ecozenith-cop-chart
+  in www/ctc-ecozenith-chart.js. Home Assistant's own graphs cannot draw two
+  units in one chart: its history graph gives each unit a chart of its own,
+  one under the other, and its statistics graph draws both on one axis with
+  no unit. The card reads the figures as those graphs do, the history over
+  the websocket for the day and the long term statistics for the month, and
+  again every five minutes while the page is open.
+- The outdoor temperature rides along and nothing more: a pump with no
+  coefficient of performance gets no chart of the temperature alone, and the
+  chart hides with its own lines. A temperature that moves a degree over a
+  day keeps an axis at least 4 °C high, so a step of the sensor is not drawn
+  as a change of weather.
+
 ## 0.30.0 (2026-11-13)
 
 ### Added

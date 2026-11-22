@@ -136,6 +136,11 @@ CHIPS_CARD = "custom:ctc-ecozenith-chips"
 READINGS_CARD = "custom:ctc-ecozenith-readings"
 CONTROLS_CARD = "custom:ctc-ecozenith-controls"
 ROWS_CARD = "custom:ctc-ecozenith-rows"
+#: The coefficient of performance and the outdoor temperature on two axes in
+#: one chart (www/ctc-ecozenith-chart.js), which no graph of Home Assistant's
+#: own can draw: its history graph gives each unit a chart of its own, and its
+#: statistics graph puts both on one axis without a unit.
+CHART_CARD = "custom:ctc-ecozenith-cop-chart"
 
 HEAT_POWER = "@heat_power"
 SUPPLIED_POWER = "@supplied_power"
@@ -328,6 +333,16 @@ REPORTED_COP = (
 #: Never both, so a pump that reports a figure is not drawn a second, rougher
 #: line beside it.
 _GRAPH_STAND_INS = {"graph_cop_today": ("cop_estimate_day",)}
+#: Lines a graph draws beside its own, never instead of them, on an axis of
+#: their own in the page's chart (CHART_CARD): the outdoor temperature beside
+#: the coefficient of performance, which on an air to water heat pump follows
+#: it closely. A companion neither makes the graph nor keeps it on the page: a
+#: pump with no coefficient of performance gets no graph of the outdoor
+#: temperature alone, and the graph hides with its own lines.
+_GRAPH_COMPANIONS = {
+    "graph_cop_today": ("outdoor_temp",),
+    "graph_cop": ("outdoor_temp",),
+}
 #: The line a graph's heading promises, where it has one: without it, because
 #: the installation lacks the entity or has only ever read it as zero, the
 #: graph is left out rather than drawn under a heading that promises more. The
@@ -425,6 +440,7 @@ TEXT = {
         "graph_flow": "Framledning och börvärde det senaste dygnet",
         "graph_compressor": "Kompressorn det senaste dygnet",
         "graph_cop_today": "Värmefaktor det senaste dygnet",
+        "chart_empty": "Inga värden att visa ännu.",
         "graph_energy": "Energi per dygn",
         "graph_runtime": "Kompressorns gångtid per dygn",
         "graph_cop": "Värmefaktor per dygn",
@@ -539,6 +555,7 @@ TEXT = {
         "graph_flow": "Flow and setpoint over the last day",
         "graph_compressor": "The compressor over the last day",
         "graph_cop_today": "COP over the last day",
+        "chart_empty": "No values to show yet.",
         "graph_energy": "Energy per day",
         "graph_runtime": "Compressor running time per day",
         "graph_cop": "COP per day",
@@ -1067,6 +1084,46 @@ class _Builder:
         assert card is not None  # only called with rows in hand
         return card
 
+    def _graph_entity(self, key: str) -> dict[str, str] | str | None:
+        """A graph's line for ``key``, named as the page names it, or None without one."""
+        entity_id = self.entity_id(key)
+        real = self.roles.get(key, key)
+        if not entity_id or real in self.unused:
+            return None
+        name = self.labels.get(real) or self.names.get(real)
+        return {"entity": entity_id, "name": str(name)} if name else entity_id
+
+    def _chart(
+        self, graph_id: str, kind: str, entities: list[dict[str, str] | str]
+    ) -> dict[str, Any]:
+        """The page's own chart: the graph's lines on the left axis, its companions on the right.
+
+        Over the last day as lines, as the history graph drew it, or a bar a
+        day over a month with the day's mean temperature as a line, as the
+        statistics graph drew the days.
+        """
+        series = [
+            {**(e if isinstance(e, dict) else {"entity": e}), "axis": "cop"} for e in entities
+        ]
+        for key in _GRAPH_COMPANIONS[graph_id]:
+            entity = self._graph_entity(key)
+            if entity is not None:
+                series.append(
+                    {**(entity if isinstance(entity, dict) else {"entity": entity}),
+                     "axis": "temperature"}
+                )
+        chart: dict[str, Any] = {
+            "type": CHART_CARD,
+            "title": self.text[graph_id],
+            "series": series,
+            "empty": self.text["chart_empty"],
+        }
+        if kind == "history":
+            chart.update({"mode": "history", "hours": GRAPH_HOURS})
+        else:
+            chart.update({"mode": "days", "days": GRAPH_DAYS})
+        return chart
+
     def graph(self, graph_id: str, kind: str, keys: Iterable[str]) -> dict[str, Any] | None:
         """A graph of what this installation has of the keys, or None.
 
@@ -1081,17 +1138,18 @@ class _Builder:
         entities = []
         shown: list[dict[str, Any]] = []
         for key in keys:
-            entity_id = self.entity_id(key)
-            real = self.roles.get(key, key)
-            if not entity_id or real in self.unused:
+            entity = self._graph_entity(key)
+            if entity is None:
                 continue
-            name = self.labels.get(real) or self.names.get(real)
-            entities.append({"entity": entity_id, "name": str(name)} if name else entity_id)
-            shown.append(_shown_when_available(entity_id, _hidden_states(real)))
+            entities.append(entity)
+            real = self.roles.get(key, key)
+            shown.append(_shown_when_available(self.entity_id(key), _hidden_states(real)))
         if not entities:
             return None
         card: dict[str, Any] = {"grid_options": {"columns": "full"}}
-        if kind == "history":
+        if graph_id in _GRAPH_COMPANIONS:
+            card.update(self._chart(graph_id, kind, entities))
+        elif kind == "history":
             card.update({"type": "history-graph", "hours_to_show": GRAPH_HOURS,
                          "entities": entities})
         else:

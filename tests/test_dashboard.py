@@ -385,13 +385,21 @@ def test_performance_opens_with_the_graphs_and_then_every_reading(dashboard_view
         for key in ("p30_avgiven_varme_totalt", "compressor_kwh", "immersion_kwh")
     ]
     # A bar per day: each day is one number, and a line drew values between
-    # the days that were never there (V4).
+    # the days that were never there (V4). The page's own chart, which draws
+    # the bars and the outdoor temperature on an axis of its own.
     cop = _section(sections, "Värmefaktor per dygn")["cards"][1]
-    assert cop["chart_type"] == "bar" and cop["stat_types"] == ["mean"]
-    assert cop["entities"] == [pump["entities"]["cop_day"]]
+    assert cop["type"] == CHART and cop["mode"] == "days" and cop["days"] == 30
+    assert _lines(cop, "cop") == [pump["entities"]["cop_day"]]
+    assert _lines(cop, "temperature") == [pump["entities"]["outdoor_temp"]]
 
 
 COP_TODAY = "Värmefaktor det senaste dygnet"
+CHART = "custom:ctc-ecozenith-cop-chart"
+
+
+def _lines(card: dict, axis: str) -> list[str]:
+    """The entities a chart draws on one of its two axes."""
+    return [series["entity"] for series in card["series"] if series["axis"] == axis]
 
 
 def _with_estimate(pump: dict, reported: bool) -> dict:
@@ -410,23 +418,29 @@ def test_the_days_cop_follows_the_compressor_as_the_pumps_own_figure(dashboard_v
     headings = _headings(sections)
     assert headings.index(COP_TODAY) == headings.index("Kompressorn det senaste dygnet") + 1
     graph = _section(sections, COP_TODAY)["cards"][1]
-    assert graph["type"] == "history-graph" and graph["hours_to_show"] == 24
-    assert [e["entity"] if isinstance(e, dict) else e for e in graph["entities"]] == [
-        pump["entities"]["cop_day"]
-    ]
+    assert graph["type"] == CHART and graph["mode"] == "history" and graph["hours"] == 24
+    assert _lines(graph, "cop") == [pump["entities"]["cop_day"]]
+    # The outdoor temperature beside it, on the right axis, named as the page names it.
+    assert graph["series"][-1] == {
+        "entity": pump["entities"]["outdoor_temp"], "name": "Utetemperatur",
+        "axis": "temperature",
+    }
+    assert graph["title"] == COP_TODAY and graph["empty"] == "Inga värden att visa ännu."
 
 
 def test_the_days_cop_is_the_estimate_where_the_pump_reports_none(dashboard_views, pumps):
     pump = _with_estimate(pumps["vsh"], reported=False)
     graph = _section(_tab(dashboard_views, pump, "performance"), COP_TODAY)["cards"][1]
     entity = "sensor.ctc_ecozenith_i255_uppskattad_dygnsvarmefaktor"
-    assert [e["entity"] if isinstance(e, dict) else e for e in graph["entities"]] == [entity]
+    assert _lines(graph, "cop") == [entity]
+    assert _lines(graph, "temperature") == [pump["entities"]["outdoor_temp"]]
     # Hidden only while unavailable, as every coefficient of performance:
     # unknown is a figure with a reason (skäl), and its day is still drawn.
     assert graph["visibility"] == [
         {"condition": "state", "entity": entity, "state_not": ["unavailable"]}
     ]
-    # Without the estimate either, there is no figure to draw and no graph.
+    # Without the estimate either, there is no figure to draw and no graph:
+    # the outdoor temperature alone does not make one.
     del pump["entities"]["cop_estimate_day"]
     assert COP_TODAY not in _headings(_tab(dashboard_views, pump, "performance"))
 
@@ -435,9 +449,28 @@ def test_a_description_from_before_the_word_keeps_the_pumps_own_figure(dashboard
     pump = {**pumps["vsh"]}
     pump.pop("cop_reported", None)
     graph = _section(_tab(dashboard_views, pump, "performance"), COP_TODAY)["cards"][1]
-    assert [e["entity"] if isinstance(e, dict) else e for e in graph["entities"]] == [
-        pump["entities"]["cop_day"]
-    ]
+    assert _lines(graph, "cop") == [pump["entities"]["cop_day"]]
+
+
+def test_the_outdoor_temperature_neither_makes_the_cop_graphs_nor_keeps_them(
+    dashboard_views, pumps
+):
+    """A companion line rides along; the graph comes and goes with its own lines."""
+    pump = pumps["vsh"]
+    for heading in (COP_TODAY, "Värmefaktor per dygn"):
+        card = _section(_tab(dashboard_views, pump, "performance"), heading)["cards"][1]
+        shown = json.dumps(card["visibility"])
+        assert pump["entities"]["outdoor_temp"] not in shown
+        assert pump["entities"]["cop_day"] in shown
+    # A pump without the outdoor temperature still gets its coefficient, alone.
+    del pump["entities"]["outdoor_temp"]
+    card = _section(_tab(dashboard_views, pump, "performance"), COP_TODAY)["cards"][1]
+    assert _lines(card, "temperature") == [] and _lines(card, "cop")
+    # And one without a coefficient gets neither graph.
+    for key in dashboard_views.REPORTED_COP:
+        pump["entities"].pop(key, None)
+    headings = _headings(_tab(dashboard_views, pumps["vsh"] | pump, "performance"))
+    assert COP_TODAY not in headings and "Värmefaktor per dygn" not in headings
 
 
 @pytest.mark.parametrize(
@@ -503,7 +536,7 @@ def test_the_weeks_and_months_coefficient_take_their_place_when_the_pump_has_the
     overview = _tab(dashboard_views, pump, "overview")
     assert "cop_week" not in _keys(pump, _section(overview, "Nyckeltal"))
     cop = _section(_tab(dashboard_views, pump, "performance"), "Värmefaktor per dygn")["cards"][1]
-    assert cop["entities"] == [pump["entities"]["cop_day"]]
+    assert _lines(cop, "cop") == [pump["entities"]["cop_day"]]
 
     pump["entities"]["cop_week"] = "sensor.ctc_ecozenith_i255_veckovarmefaktor"
     pump["entities"]["cop_month"] = "sensor.ctc_ecozenith_i255_manadsvarmefaktor"
@@ -517,7 +550,7 @@ def test_the_weeks_and_months_coefficient_take_their_place_when_the_pump_has_the
     assert energy[:4] == ["cop_day", "cop_week", "cop_month", "cop_year"]
     # The month's figure as the second series of the daily bars.
     cop = _section(performance, "Värmefaktor per dygn")["cards"][1]
-    assert cop["entities"] == [pump["entities"]["cop_day"], pump["entities"]["cop_month"]]
+    assert _lines(cop, "cop") == [pump["entities"]["cop_day"], pump["entities"]["cop_month"]]
     # Both are explained, say what they rest on, and are listed with the rest.
     items = {key: item for key, (_k, item, _e) in zip(keys, _items(readings), strict=True)}
     for key in ("cop_week", "cop_month"):

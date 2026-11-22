@@ -1,4 +1,4 @@
-"""Serve the page's cards and the icon pack, and load them into the frontend.
+"""Serve the page's cards, its chart and the icon pack, and load them into the frontend.
 
 The CTC page uses two cards of its own (www/ctc-ecozenith-card.js), which
 add an explanation to every value. They are served by the integration and added as a
@@ -34,6 +34,12 @@ CARD_FILE = Path(__file__).parent / "www" / "ctc-ecozenith-card.js"
 ICON_URL = f"/{DOMAIN}/ctc-ecozenith-icon.js"
 ICON_FILE = Path(__file__).parent / "www" / "ctc-ecozenith-icon.js"
 
+#: The chart of the coefficient of performance beside the outdoor temperature,
+#: on two axes (www/ctc-ecozenith-chart.js), loaded into the frontend as the
+#: icon pack is.
+CHART_URL = f"/{DOMAIN}/ctc-ecozenith-chart.js"
+CHART_FILE = Path(__file__).parent / "www" / "ctc-ecozenith-chart.js"
+
 _REGISTERED = f"{DOMAIN}_card_registered"
 
 
@@ -47,6 +53,7 @@ async def async_register_card(hass: HomeAssistant, version: str) -> None:
         await hass.http.async_register_static_paths([
             StaticPathConfig(CARD_URL, str(CARD_FILE), False),
             StaticPathConfig(ICON_URL, str(ICON_FILE), False),
+            StaticPathConfig(CHART_URL, str(CHART_FILE), False),
         ])
     except (RuntimeError, ValueError) as err:
         # Already served, from an earlier load in this process.
@@ -57,6 +64,7 @@ async def async_register_card(hass: HomeAssistant, version: str) -> None:
         frontend.add_extra_js_url(hass, versioned)
     # The icon pack is always an extra module: an icon is wanted on every page.
     frontend.add_extra_js_url(hass, f"{ICON_URL}?v={version}")
+    frontend.add_extra_js_url(hass, f"{CHART_URL}?v={version}")
 
 
 async def _async_register_resource(hass: HomeAssistant, versioned: str) -> bool:

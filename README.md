@@ -574,6 +574,9 @@ it is never out of date. Each heat pump gets four tabs.
   The day's coefficient of performance is the pump's own figure where its
   energy counters give one, and the integration's estimate in its place where
   they do not, never both.
+  Both charts of the coefficient of performance draw the outdoor temperature
+  beside it on an axis of its own, °C on the right, since on an air to water
+  heat pump the one follows the other.
 - **All values.** The full list with a search field over it, every value the
   installation offers, the display's own pages among them under the names the
   panel prints. Nothing is left out here whatever it reads, which makes it the
