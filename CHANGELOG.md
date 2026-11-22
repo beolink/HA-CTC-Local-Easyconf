@@ -3,6 +3,20 @@
 The notes of a release are its tag's message, as the README says under
 Releases. This file collects what is on its way into the next release.
 
+## Unreleased
+
+### Fixed
+
+- The confirmation of a unit that turned up by itself no longer calls
+  `_set_confirm_only`, which Home Assistant 2026.11 deprecated as a no-op
+  whose flag was never read. Nothing changes in the form.
+- The weekly smoke test against the newest Home Assistant starts again: since
+  2026.11 the entity registry waits, while it loads, for the config entries,
+  so the smoke test now loads the registries and the config entries side by
+  side as Home Assistant's bootstrap does. It had stopped before testing
+  anything on 9 and 16 November, which is also why the deprecation above was
+  not reported.
+
 ## 0.31.0 (2026-11-22)
 
 ### Added

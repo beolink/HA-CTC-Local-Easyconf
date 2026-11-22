@@ -811,11 +811,17 @@ async def _start(hass: Any) -> None:
     for module in (frame, device_registry):
         if hasattr(module, "async_setup"):
             module.async_setup(hass)
-    for module in (area_registry, category_registry, device_registry, entity_registry,
-                   floor_registry, issue_registry, label_registry):
-        await module.async_load(hass)
+    # The registries and the config entries load side by side, as bootstrap
+    # loads them: since 2026.11 the entity registry waits, while it loads, for
+    # the config entries to be read, so they must exist before it starts.
     hass.config_entries = config_entries.ConfigEntries(hass, {})
-    await hass.config_entries.async_initialize()
+    await asyncio.gather(
+        *(module.async_load(hass) for module in (
+            area_registry, category_registry, device_registry, entity_registry,
+            floor_registry, issue_registry, label_registry,
+        )),
+        hass.config_entries.async_initialize(),
+    )
 
 
 async def _run(strict: bool, captured: Captured) -> int:
