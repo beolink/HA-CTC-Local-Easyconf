@@ -1048,7 +1048,11 @@ to be on the same installation (the id itself never leaves the house, and the
 server hashes the hash again before storing it), how many warnings and errors
 the integration's own logger wrote since the previous report, never a message,
 and the config entry's state by Home Assistant's own name for it, such as
-loaded or waiting to be set up again, never the reason.
+loaded or waiting to be set up again. Where it is not loaded, a code for why
+goes with it: either this integration's own name for the failure, a fixed string
+from its own texts such as the one for a Modbus place another client holds, or
+one of eight codes a house works out from the wording itself. Never the wording,
+which is free text and stays at home.
 
 This integration's own part, `stats_extra.py`, adds which transports are in
 use, whether control is enabled, how many display pages are harvested and how

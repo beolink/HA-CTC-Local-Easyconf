@@ -44,6 +44,7 @@ import asyncio
 import hashlib
 import logging
 import random
+import re
 import uuid
 from datetime import timedelta
 from typing import Any, Callable
@@ -61,7 +62,7 @@ _LOGGER = logging.getLogger(__name__)
 
 ENDPOINT = "https://stats.rnet.se/api/v1/report"
 #: 3 added the config entry's state.
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 #: Option key that controls reporting. On unless the user turns it off.
 OPTION_KEY = "send_statistics"
@@ -81,6 +82,66 @@ TIMEOUT = 10
 #: was missing here, so every integration sending it had its firmware dropped
 #: before the wire.
 EXTRA_KEYS = ("models", "features", "errors", "metrics", "firmware", "firmwares")
+
+#: Why an entry did not start, as a code and never as a sentence.
+#:
+#: Home Assistant keeps the reason in plain text on the entry, and that is free
+#: text: it can carry a host name, a path or whatever a library put in an
+#: exception, and it never leaves the house. What leaves is a slug. Our own
+#: integrations raise with a translation_key, a fixed string from their own
+#: strings.json that no user can influence, and that key is sent as it is, which
+#: makes it far more useful than a category: modbus_busy says exactly what the
+#: integration found when it probed the port. Without such a key the text is
+#: classified HERE, in the house, and only the resulting code is sent.
+SETUP_REASONS = frozenset(
+    {"timeout", "unreachable", "busy", "auth", "config", "unsupported", "internal", "unknown"}
+)
+
+#: Word by word, first match wins. Ordered: the specific before the general, so
+#: "connection refused" is unreachable rather than config. English only, which
+#: is what Home Assistant and the libraries write; our own reasons carry a key
+#: instead and never reach this list.
+_REASON_WORDS = (
+    ("timeout", ("timeout", "timed out", "no answer")),
+    ("auth", ("auth", "unauthor", "forbidden", "credential", "password", "token", "401", "403")),
+    (
+        "unreachable",
+        ("unreachable", "no route", "refused", "cannot connect", "could not connect",
+         "connection error", "connection reset", "host is down", "name or service", "dns"),
+    ),
+    ("busy", ("busy", "in use", "already connected", "holds", "locked")),
+    ("unsupported", ("unsupported", "not supported", "incompatible", "requires", "too old")),
+    ("config", ("invalid", "missing", "not configured", "malformed", "bad request")),
+    (
+        "internal",
+        ("traceback", "attributeerror", "keyerror", "typeerror", "valueerror", "indexerror"),
+    ),
+)
+
+#: Vad en nyckel får se ut som. Samma mönster som backendens, så en nyckel som
+#: aldrig kunde lagras heller inte skickas.
+_SLUG = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
+
+#: The states where a reason is worth sending at all. A loaded entry has none.
+_FAILED_STATES = frozenset({"setup_error", "setup_retry", "migration_error", "failed_unload"})
+
+
+def classify_setup_reason(key: Any, reason: Any) -> str:
+    """The code for a failed set-up: the integration own key, or the text classified.
+
+    Pure on purpose, so a suite that cannot import Home Assistant can still hold
+    it. Every plugin carries this file byte for byte, and this is where each
+    copy's classification is tested.
+    """
+    if isinstance(key, str) and _SLUG.match(key):
+        return key
+    if not isinstance(reason, str) or not reason.strip():
+        return "unknown"
+    text = reason.lower()
+    for code, words in _REASON_WORDS:
+        if any(word in text for word in words):
+            return code
+    return "unknown"
 
 #: Home Assistant's names for the states a config entry can be in. Only these
 #: are ever sent; anything else is left out rather than passed through.
@@ -296,6 +357,24 @@ class StatsReporter:
             return None
         return value if value in ENTRY_STATES else None
 
+    def _setup_reason(self) -> str | None:
+        """Why the entry did not start, as a slug. None while it is running.
+
+        The integration's own translation_key first, because it is the most
+        precise thing available and is a fixed string from our own code. Then
+        the plain reason, classified here and sent only as a code. Never the
+        text itself: see SETUP_REASONS.
+        """
+        try:
+            if self._entry_state() not in _FAILED_STATES:
+                return None
+            return classify_setup_reason(
+                getattr(self.entry, "error_reason_translation_key", None),
+                getattr(self.entry, "reason", None),
+            )
+        except Exception:  # noqa: BLE001 - statistics must never break anything
+            return None
+
     async def _async_ha_id(self) -> str | None:
         """The id every beolink plugin on this Home Assistant arrives at on its
         own. A hash of HA's instance id, so the instance id stays in the house."""
@@ -358,6 +437,7 @@ class StatsReporter:
             "lon": lon,
             "ha_id": await self._async_ha_id(),
             "entry_state": self._entry_state(),
+            "setup_reason": self._setup_reason(),
         }
         counter = _log_counter_for(self.domain, self.entry.entry_id)
         if counter is not None:

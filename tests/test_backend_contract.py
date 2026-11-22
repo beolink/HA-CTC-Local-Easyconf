@@ -51,8 +51,8 @@ STATS_PY = COMPONENT / "stats.py"
 # Copied from beolink/stats lib/ingest.ts and lib/entry-state.ts, 2026-10-13.
 
 #: lib/ingest.ts SCHEMA_VERSION and ACCEPTED_SCHEMAS.
-BACKEND_SCHEMA_VERSION = 3
-ACCEPTED_SCHEMAS = {1, 2, 3}
+BACKEND_SCHEMA_VERSION = 4
+ACCEPTED_SCHEMAS = {1, 2, 3, 4}
 #: lib/ingest.ts MAX_BODY, enforced by app/api/v1/report/route.ts.
 MAX_BODY = 4096
 
@@ -62,6 +62,8 @@ ALLOWED_KEYS = {
     "python_version", "country", "language", "entities", "devices", "models",
     "features", "errors", "lat", "lon", "metrics", "firmware", "firmwares",
     "ha_id", "log_errors", "log_warnings", "entry_state",
+    # beolink/stats 875b612, 2026-11-22: why the entry did not start, as a slug.
+    "setup_reason",
 }
 
 #: lib/ingest.ts METRICS, the entries this integration sends. A metric not in
@@ -207,6 +209,13 @@ def backend_validate(body: dict) -> tuple[str | None, dict]:
     ha_id = body["ha_id"].lower() if isinstance(body.get("ha_id"), str) else ""
     language = body.get("language")
     entry_state = body.get("entry_state")
+    # lib/ingest.ts, schema 4: skälet är en slug eller inget. En mening faller.
+    reason = body.get("setup_reason")
+    setup_reason = (
+        reason.lower()
+        if isinstance(reason, str) and RE_SLUG.match(reason.lower())
+        else None
+    )
     country = _matching(body.get("country"), RE_CC)
     return None, {
         "integration": integration,
@@ -222,6 +231,7 @@ def backend_validate(body: dict) -> tuple[str | None, dict]:
         "log_errors": _clamp_int(body.get("log_errors"), 1000000),
         "log_warnings": _clamp_int(body.get("log_warnings"), 1000000),
         "entry_state": entry_state if entry_state in ENTRY_STATES else None,
+        "setup_reason": setup_reason,
         "firmwares": firmwares,
         "entities": _clamp_int(body.get("entities"), 100000),
         "devices": _clamp_int(body.get("devices"), 10000),
@@ -239,7 +249,7 @@ def backend_validate(body: dict) -> tuple[str | None, dict]:
 #: sha256 of custom_components/ctc_ecozenith/stats.py, line endings as git
 #: keeps them. The reference copy is client/homeassistant/stats.py in
 #: beolink/stats.
-STATS_PY_SHA256 = "921b1744a832d058045e4fbe6504f6b83e64167f85e9f3c638b1dd0860468fce"
+STATS_PY_SHA256 = "5cfcf1b7fb576357b7bdabe925f72649d30c1af2d70e4126c967fe2d240ccfa1"
 
 
 def _stats_py() -> ast.Module:
@@ -295,8 +305,8 @@ def test_stats_py_is_the_shared_file_unchanged():
     )
 
 
-def test_stats_py_speaks_schema_three():
-    assert _constant("SCHEMA_VERSION") == 3
+def test_stats_py_speaks_schema_four():
+    assert _constant("SCHEMA_VERSION") == 4
     assert _constant("SCHEMA_VERSION") == BACKEND_SCHEMA_VERSION
     assert _constant("SCHEMA_VERSION") in ACCEPTED_SCHEMAS
 
@@ -405,7 +415,7 @@ CASES = {"vsh": VSH, "pt": PT, "i360": I360, "unknown": UNKNOWN}
 #: OS in Sweden. The address-like fields are what stats.py makes of them: a
 #: random uuid, a 32 digit hash, a position rounded to one decimal.
 BASE = {
-    "schema": 3,
+    "schema": 4,
     "install_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
     "integration": "ctc_ecozenith",
     "version": "0.20.0",
@@ -420,6 +430,8 @@ BASE = {
     "lon": 18.1,
     "ha_id": "0123456789abcdef0123456789abcdef",
     "entry_state": "loaded",
+    # Skälet skrivs alltid, och är None så länge posten är laddad.
+    "setup_reason": None,
     "log_errors": 0,
     "log_warnings": 3,
 }
@@ -457,6 +469,10 @@ def test_every_field_survives_as_it_was_sent(stats_extra, name):
     assert stored["errors"] == sent["errors"]
     for key in BASE:
         if key in ("schema", "python_version"):
+            continue
+        # Ett fält som är None skickas inte alls, se report(). En laddad post
+        # har inget skäl, och då finns nyckeln inte på tråden.
+        if key not in sent:
             continue
         assert stored[key] == sent[key], key
     # The one field the backend cuts on purpose: Python's version to major.minor.
@@ -586,13 +602,74 @@ def test_only_a_product_code_the_backend_keeps_as_it_is_is_sent(stats_extra, pro
 # ------------------------------------------- the copy of the backend itself
 
 
+def _classify():
+    """classify_setup_reason ur stats.py, körd utan Home Assistant.
+
+    Funktionen är ren med flit, just för att den här sviten ska kunna hålla
+    den: varje plugin bär samma fil, och klassningen är det som avgör vilken
+    kod som lämnar huset.
+    """
+    import re as _re
+
+    source = STATS_PY.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    namespace: dict = {"re": _re, "Any": object}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            getattr(t, "id", "") in ("_SLUG", "_REASON_WORDS", "SETUP_REASONS", "_FAILED_STATES")
+            for t in node.targets
+        ):
+            exec(ast.get_source_segment(source, node), namespace)
+        if isinstance(node, ast.FunctionDef) and node.name == "classify_setup_reason":
+            exec(ast.get_source_segment(source, node), namespace)
+    return namespace["classify_setup_reason"], namespace["SETUP_REASONS"]
+
+
+def test_the_reason_leaves_the_house_as_a_code_and_never_as_a_sentence():
+    classify, codes = _classify()
+    # Integrationens egen nyckel går som den är: den står i vår strings.json
+    # och kan inte påverkas av en användare.
+    assert classify("modbus_busy", "whatever the library said") == "modbus_busy"
+    assert classify("modbus_closed", None) == "modbus_closed"
+    # Utan nyckel klassas texten här, i huset, och bara koden skickas.
+    for text, code in (
+        ("Timeout connecting to the heat pump", "timeout"),
+        ("[Errno 111] Connection refused", "unreachable"),
+        ("No route to host", "unreachable"),
+        ("Another client holds the only Modbus place", "busy"),
+        ("401 Unauthorized", "auth"),
+        ("Firmware 1.2 is not supported", "unsupported"),
+        ("Invalid port 0", "config"),
+        ("AttributeError: NoneType has no attribute read", "internal"),
+        ("Could not set up", "unknown"),
+        ("", "unknown"),
+        (None, "unknown"),
+    ):
+        assert classify(None, text) == code, text
+    # Inget som klassas ligger utanför den slutna listan.
+    assert {classify(None, t) for t in ("Timeout", "refused", "nonsense")} <= codes
+    # En nyckel som inte är en slug duger inte som nyckel: då gäller texten.
+    assert classify("Inte En Nyckel", "Timeout") == "timeout"
+    # Och allt som klassaren ger passerar backendens mönster.
+    for code in codes:
+        assert RE_SLUG.match(code), code
+
+
+def test_the_backend_takes_the_reason_as_a_slug_and_drops_a_sentence():
+    good = {**BASE, "entry_state": "setup_retry", "setup_reason": "modbus_busy"}
+    reason, stored = backend_validate(good)
+    assert reason is None and stored["setup_reason"] == "modbus_busy"
+    _reason, meningen = backend_validate({**good, "setup_reason": "Another client holds it"})
+    assert meningen["setup_reason"] is None
+
+
 def test_the_copy_of_validate_refuses_what_the_backend_refuses():
     # The checks above are only as good as backend_validate, so it is held to
     # the backend's own refusals and clamps on a report that breaks them.
     good = {**BASE, "models": ["i255"], "features": {"modbus": True}, "metrics": {"cop_day": 3.0}}
     assert backend_validate(good)[0] is None
     assert backend_validate({**good, "serial": "x"})[0] == "unknown_field:serial"
-    assert backend_validate({**good, "schema": 4})[0] == "bad_schema_version"
+    assert backend_validate({**good, "schema": 5})[0] == "bad_schema_version"
     assert backend_validate({**good, "integration": "ctc-ecozenith"})[0] == "bad_integration"
     assert backend_validate({**good, "install_id": "nope"})[0] == "bad_install_id"
     assert backend_validate({**good, "version": "-1"})[0] == "bad_version"
