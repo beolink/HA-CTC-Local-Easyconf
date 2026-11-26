@@ -1056,7 +1056,14 @@ which is free text and stays at home.
 
 This integration's own part, `stats_extra.py`, adds which transports are in
 use, whether control is enabled, how many display pages are harvested and how
-many register reads failed. It says how many pages the display's menu has, so
+many register reads failed, and that number split into the rounds that lost
+the connection and the register blocks that stayed silent. The two call for
+opposite answers, which the one total hid: a round that loses the line teaches
+the poll round nothing, so a connection that keeps dropping is counted again
+every round for as long as it does, while a block the model lacks is given up
+on after three rounds and then costs nothing. A count in the thousands is
+therefore the line, never the register plan asking for more than the model
+has. It says how many pages the display's menu has, so
 that no page harvested because nothing is ticked can be told from no page
 harvested because the menu was never read, and whether the last reading of the
 menu since Home Assistant started recognised the home screen and got into the

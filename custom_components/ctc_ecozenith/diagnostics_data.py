@@ -329,6 +329,10 @@ def modbus_section(runtime: Any) -> dict[str, Any] | None:
         "block_plan": [list(block) for block in getattr(modbus, "_blocks", None) or []],
         "missing_blocks": sorted(missing or ()),
         "read_failures": getattr(modbus, "read_failures", None),
+        # The same total told apart: rounds the line was lost in, and blocks
+        # that stayed silent while the rest answered.
+        "line_failures": getattr(modbus, "line_failures", None),
+        "block_failures": getattr(modbus, "block_failures", None),
         "unknown_codes": dict(getattr(modbus, "unknown_codes", None) or {}),
         "registers_answered": len(getattr(modbus, "answered", None) or ()),
         "values": dict(getattr(modbus, "data", None) or {}),

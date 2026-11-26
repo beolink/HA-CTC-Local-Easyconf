@@ -29,6 +29,8 @@ EVERYTHING = {
     "control_enabled": True,
     "page_count": 7,
     "read_failures": 1,
+    "line_failures": 1,
+    "block_failures": 0,
     "heatpump_model": "EA720M",
     "serial": "720825400001",
     "display_firmware": "20260610",
@@ -92,9 +94,9 @@ def test_the_lists_hold_nothing_but_flags_and_numbers(stats_extra):
 
 def test_the_lists_do_not_overlap_and_are_what_the_consent_text_counts(stats_extra):
     assert not (stats_extra.FEATURE_KEYS & stats_extra.METRIC_KEYS)
-    # Four figures, two estimated ones, two totals, three parts of the serial
-    # number's story.
-    assert len(stats_extra.METRIC_KEYS) == 11
+    # Four figures, two estimated ones, two totals, the failed reads split into
+    # the line and the silent blocks, three parts of the serial number's story.
+    assert len(stats_extra.METRIC_KEYS) == 13
     # Four about the set-up, six about whether a figure is possible, three why
     # not, three about the two power rows on the heat pump's page, whether they
     # gave numbers, and a figure the integration worked out from them itself, and

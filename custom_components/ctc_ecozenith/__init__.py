@@ -218,7 +218,11 @@ def seen_store(hass: HomeAssistant, entry_id: str) -> SeenStore:
     )
 
 
-_FAILURES: dict[str, ErrorCounter] = {}
+#: One counter per cumulative count the report sends as a change since the
+#: previous report, by entry and by count. The failed reads are sent both as
+#: a total and split into the line and the silent blocks, and each of the
+#: three has to remember its own last value.
+_FAILURES: dict[str, dict[str, ErrorCounter]] = {}
 
 #: Entries whose panel has been walked to the system information page in this
 #: run. The walk moves the display, so it is attempted once, not at every
@@ -974,7 +978,12 @@ def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, An
     coordinators already have. See stats_extra.py for exactly what is sent.
     """
     runtime = getattr(entry, "runtime_data", None)
-    failures = _FAILURES.setdefault(entry.entry_id, ErrorCounter())
+    counters = _FAILURES.setdefault(entry.entry_id, {})
+
+    def _since_last_report(name: str, total: int) -> int:
+        """The change in one cumulative count since the previous report."""
+        return counters.setdefault(name, ErrorCounter()).delta(total)
+
     # The menu as stored, and how far this run's last walk through it got:
     # whether no page is read because nothing is ticked or because the menu
     # was never read, and if never, at which step (roadmap R12 and L6).
@@ -989,13 +998,17 @@ def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, An
     if runtime is None:
         # Set-up has not finished. The model is the one thing the config
         # knows; a read failure is recorded so a controller that never
-        # answers is visible rather than silent.
+        # answers is visible rather than silent. It counts against the line,
+        # which is what a controller that cannot be reached at all is, so that
+        # the two parts still add up to the total.
         return build_extra(
             entry.data.get("model"),
             has_display=False,
             control_enabled=False,
             page_count=0,
             read_failures=1,
+            line_failures=1,
+            block_failures=0,
             settings_stem=stem,
             **menu,
         )
@@ -1015,7 +1028,12 @@ def _stats_extra_for(hass: HomeAssistant, entry: CtcConfigEntry) -> dict[str, An
         has_display=runtime.web is not None,
         control_enabled=runtime.control_enabled,
         page_count=len(runtime.pages),
-        read_failures=failures.delta(runtime.modbus.read_failures),
+        read_failures=_since_last_report("read", runtime.modbus.read_failures),
+        # And what that total was made of: rounds the line was lost in, and
+        # blocks that stayed silent while the rest answered. See the two
+        # counters on the Modbus coordinator for why the difference matters.
+        line_failures=_since_last_report("line", runtime.modbus.line_failures),
+        block_failures=_since_last_report("block", runtime.modbus.block_failures),
         heatpump_model=runtime.identity.heatpump_model,
         serial=runtime.identity.serial,
         display_firmware=runtime.identity.display_firmware,

@@ -78,6 +78,11 @@ METRICS = {
     "cop_estimate_lifetime": {"max": 10, "min": 0.5, "dec": 2},
     "heat_total_kwh": {"max": 1000000, "dec": 1},
     "consumption_total_kwh": {"max": 1000000, "dec": 1},
+    # beolink/stats 000f9ff, 2026-11-26: the failed reads split into the line
+    # and the silent blocks, taken before this integration sends them. An
+    # unknown metric is dropped there without a word, so the backend goes first.
+    "line_errors": {"max": 1000000, "dec": 0},
+    "block_errors": {"max": 1000000, "dec": 0},
     "built_year": {"max": 2100, "min": 1990, "dec": 0},
     "built_week": {"max": 53, "min": 1, "dec": 0},
     "product_code": {"max": 9999, "min": 1000, "dec": 0},

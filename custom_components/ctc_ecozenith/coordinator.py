@@ -103,6 +103,18 @@ class CtcModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # that lost the connection. Only used by the optional daily report,
         # which sends the delta since it last ran.
         self.read_failures = 0
+        #: The same total told apart by what went wrong, because the two call
+        #: for opposite answers and the total hid which it was. A round the
+        #: line was lost in, or that the probe register gave up on, costs one
+        #: here and teaches nothing: the plan is asked again in full next
+        #: round, so a line that keeps dropping counts for as long as it does.
+        #: A block that stays silent while the rest answer costs one a round
+        #: until MissingBlocks gives up on it three rounds later, and nothing
+        #: at all afterwards. Thousands a day are therefore the line; the
+        #: registers a model lacks cannot reach three figures on their own.
+        #: The two always add up to read_failures.
+        self.line_failures = 0
+        self.block_failures = 0
         #: Every register address that has answered at least once since Home
         #: Assistant started, taken from the raw words of each round. This is
         #: where "the register answered" is judged. ``data`` is no good for
@@ -120,9 +132,12 @@ class CtcModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
         except CtcModbusTransportError as err:
             self.read_failures += 1
+            self.line_failures += 1
             # Home Assistant logs the failure once, and the recovery, by itself.
             raise UpdateFailed(f"the heat pump was lost at register {err.address}: {err}") from err
-        self.read_failures += len(result.unanswered) + len(result.dropped)
+        silent = len(result.unanswered) + len(result.dropped)
+        self.read_failures += silent
+        self.block_failures += silent
 
         for start in self._missing.note(result):
             count = next((n for s, n in self._blocks if s == start), 1)

@@ -5,6 +5,17 @@ Releases. This file collects what is on its way into the next release.
 
 ## Unreleased
 
+### Added
+
+- The daily report sends the count of failed register reads split in two as
+  well, `line_errors` and `block_errors` beside the unchanged total: rounds
+  that lost the connection, and register blocks that stayed silent while the
+  rest answered. The two call for opposite answers and one total hid which it
+  was. A block the model lacks is given up on after three rounds and then
+  costs nothing, so it cannot reach three figures a day on its own, while a
+  line that keeps dropping is counted again every round. *Download
+  diagnostics* carries the same two counts.
+
 ### Fixed
 
 - The confirmation of a unit that turned up by itself no longer calls

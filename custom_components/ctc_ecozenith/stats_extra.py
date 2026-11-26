@@ -182,6 +182,23 @@ def energy_value(raw: Any) -> float | None:
     return value if 0.0 <= value <= 1_000_000.0 else None
 
 
+#: The largest count the backend keeps for a report. A bigger number is a
+#: fault in the counting rather than a day's reading, and it is left out
+#: instead of being stored as if it had been measured.
+COUNT_MAX = 1_000_000
+
+
+def count_value(raw: Any) -> int | None:
+    """A plain count since the previous report, or nothing where there is none."""
+    if raw is None:
+        return None
+    try:
+        count = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return max(0, count) if count <= COUNT_MAX else None
+
+
 def cop_value(raw: Any) -> float | None:
     """A coefficient of performance, rejected unless it is physically sane."""
     if raw is None:
@@ -253,6 +270,8 @@ METRIC_KEYS = frozenset(
         "cop_estimate_lifetime",
         "heat_total_kwh",
         "consumption_total_kwh",
+        "line_errors",
+        "block_errors",
         "built_year",
         "built_week",
         "product_code",
@@ -267,6 +286,8 @@ def build_extra(
     control_enabled: bool,
     page_count: int,
     read_failures: int,
+    line_failures: int | None = None,
+    block_failures: int | None = None,
     heatpump_model: str | None = None,
     serial: Any = None,
     display_firmware: Any = None,
@@ -422,6 +443,14 @@ def build_extra(
         "cop_estimate_lifetime": cop_value(cop_estimate_lifetime),
         "heat_total_kwh": energy_value(heat_total_kwh),
         "consumption_total_kwh": energy_value(consumption_total_kwh),
+        # What "errors" above was made of. A round that lost the line counts
+        # as one line error and teaches the poll round nothing, so a flapping
+        # connection counts on and on; a block the model lacks is given up on
+        # after three rounds and then costs nothing. Without the split a
+        # thousand a day looked like the register plan asking for too much,
+        # which it never can. The two add up to "errors".
+        "line_errors": count_value(line_failures),
+        "block_errors": count_value(block_failures),
         "built_year": 2000 + int(made[:2]) if made else None,
         "built_week": int(made[2:]) if made else None,
         "product_code": product_code_value(product),
